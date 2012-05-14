@@ -4,24 +4,19 @@ import (
     "net/http"
     "pat"
     "mustache"
-    "bytes"
+    "io"
 )
 
 // hello world, the web server
-func HelloServer(w http.ResponseWriter, req *http.Request, tmpl *mustache.Template) {
-    var buf bytes.Buffer;
-    tmpl.Render (map[string]string { "c": req.URL.Query().Get(":name")}, &buf)
-    buf.WriteTo(w)
+func HelloServer(w http.ResponseWriter, req *http.Request) {
+    context := map[string]string { "c": req.URL.Query().Get(":name")}
+    l := mustache.Render("hello {{c}}!\n", context)
+    io.WriteString(w, l)
 }
 
 func init() {
-    tmpl,_ := mustache.ParseString("hello {{c}}!\n")
-    tmplhdlr:= func(w http.ResponseWriter, req *http.Request) {
-      HelloServer(w, req, tmpl)
-    }
-
     m := pat.New()
-    m.Get("/hello/:name", http.HandlerFunc(tmplhdlr))
+    m.Get("/hello/:name", http.HandlerFunc(HelloServer))
 
     // Register this pat with the default serve mux so that other packages
     // may also be exported. (i.e. /debug/pprof/*)
