@@ -33,9 +33,35 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, error){
   return p2, err
 }
 
-func GetPostsSortedByDate(start int, limit int, out chan<- Post, errout chan<- error){
+func ExecuteQuery(c appengine.Context, start int, limit int, out chan<- Post, errout chan<- error){
+
   defer close(out)
   defer close(errout)
+
+  for t := q.Run(c), i := 0; ; i++ {
+    var x Post
+    key, err := t.Next(&x)
+
+    if err == datastore.Done {
+      return
+    }
+    if err != nil {
+      errout <- err
+      return
+    }
+
+    if i < start {
+      continue
+    }
+    if i >= (start + limit) {
+      return
+    }
+
+    out <- x
+  }
+}
+
+func GetPostsSortedByDate(start int, limit int, out chan<- Post, errout chan<- error){
 
   q := datastore.NewQuery("post").
           Order("-PostDate").
