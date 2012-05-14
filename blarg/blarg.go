@@ -9,37 +9,27 @@ import (
     "io"
     "time"
     "appengine"
-    "appengine/datastore"
+    // "encoding/json"
+    "blarg/post"
 )
-
-type Post struct {
-    Title       string
-    Content     string
-    Postdate    time.Time
-    StickyUrl   string
-    Sidebar     bool
-}
 
 func Index(w http.ResponseWriter, req *http.Request) {
 
-  cd := appengine.NewContext(req)
+  appcontext := appengine.NewContext(req)
 
-  p1 := Post{
-      Title:    "awesome post great job",
-      Content:  "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
-      Postdate: time.Now(),
-      StickyUrl: "",
-      Sidebar: false,
-  }
+  key, err := post.SavePost(appcontext, "awesome post great job",
+    "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
+    make([]string, 0),
+    time.Now(),
+    "")
 
-  key, err := datastore.Put(cd, datastore.NewIncompleteKey(cd, "post", nil), &p1)
   if err != nil {
       http.Error(w, err.Error(), http.StatusInternalServerError)
       return
   }
 
-  var p2 Post
-  if err = datastore.Get(cd, key, &p2); err != nil {
+  p2, err := post.GetPost(appcontext, key)
+  if err != nil {
       http.Error(w, err.Error(), http.StatusInternalServerError)
       return
   }
