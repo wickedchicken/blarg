@@ -4,7 +4,6 @@ import (
     "appengine"
     "appengine/datastore"
     "time"
-    // "encoding/json"
 )
 
 type Post struct {
@@ -32,5 +31,29 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, error){
   var p2 Post
   err := datastore.Get(context, key, &p2)
   return p2, err
+}
+
+func GetPostsSortedByDate(start int, limit int, out chan<- Post, errout chan<- error){
+  defer close(out)
+  defer close(errout)
+
+  q := datastore.NewQuery("post").
+          Order("-PostDate").
+          Start(start).
+          Limit(limit)
+  for t := q.Run(c); ; {
+          var x Post
+          key, err := t.Next(&x)
+          if err == datastore.Done {
+                  break
+          }
+          if err != nil {
+                  errout <- err
+                  return
+          }
+
+          out <- x
+  }
+  close(out)
 }
 

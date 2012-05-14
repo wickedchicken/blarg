@@ -13,7 +13,7 @@ import (
     "blarg/post"
 )
 
-func Index(w http.ResponseWriter, req *http.Request) {
+func List(w http.ResponseWriter, req *http.Request) {
 
   appcontext := appengine.NewContext(req)
 
@@ -58,7 +58,7 @@ func Index(w http.ResponseWriter, req *http.Request) {
 
 func init() {
   m := pat.New()
-  m.Get("/", http.HandlerFunc(Index))
+  m.Get("/", http.HandlerFunc(List))
   //m.Get("/list/:start", http.HandlerFunc(Index))
   // m.Get("/rss", http.HandlerFunc(Rss))
   // m.Get("/sitemap.xml", http.HandlerFunc(Sitemap))
