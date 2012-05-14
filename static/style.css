@@ -1,0 +1,22 @@
+/* another microsite joint http://wickedchicken.github.com/microsite/ */
+body { 
+font: 1em Helvetica, Arial, sans-serif;
+background: #CCA468;
+text-align: center;
+}
+
+#chunk {  
+background: #FACA81;
+margin: 0 auto;
+margin-top: 30ex;
+margin-bottom: 10ex;
+padding: 0.5em;
+width: 20em;
+}
+
+#main {  
+font: 1em Verdana, Arial, Helvetica, sans-serif;
+/* color: #675F53; */
+color: #675F53;
+clear: both;
+}
