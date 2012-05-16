@@ -4,6 +4,31 @@
 <head>
   <title>{{{blog_title}}}</title>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-  <link rel="stylesheet" type="text/css" href="static/style.css" media="screen" />
+  <link rel="stylesheet" type="text/css" href="/static/style.css" media="screen" />
+  <link rel="alternate" type="application/rss+xml" title="{{{blog_title}}} RSS feed" href="/index.rss" />
+  <link href='http://fonts.googleapis.com/css?family=Varela&amp;v2' rel='stylesheet' type='text/css' />
 </head>
 <body>
+  <div id="header">
+    <div id="logo">
+      <h1> <a href="{{{blog_link}}}">{{{blog_title}}}</a></h1>
+      <p><{{{tagline}}}/p>
+    </div>
+
+    <div style="float:right">
+      <h1>
+      </h1>
+    </div>
+    <div style="clear: both">
+    </div>
+  </div>
+
+
+  {{#search_label}}
+  <div class="malert">Showing only posts with label "{{{search_label}}}". <a href="{{{blog_link}}}">See all posts instead.</a>
+    {{/search_label}}
+  <div id="main">
+
+  <div id="content">
+    {{{content}}}
+  </div>

@@ -1,0 +1,12 @@
+<div id="sidebar">
+  <h3>links</h3>
+  <ul class="sidebar-list">
+    <li><a href="http://qrunk.com">qrunk.com</a></li>
+  </ul>
+  <h3>topics</h3>
+  <ul class="sidebar-list">
+  <% labels_and_counts.each do |label, count| %>
+    <li class="label"><%= link_to label.gsub(/\s+/, "&nbsp;"), :route => :label, :label => label %>&nbsp;(<%= count %>) </li>
+  <% end %>
+  </ul>
+</div>
