@@ -1,0 +1,27 @@
+<div class="post">
+  <p class="date" title="{{{post_date_since_now}}}">{{{post_date}}}</p>
+<div class="entry">
+<h2>{{{link_to_entry}}}</h2>
+<% unless e.labels.empty? %>
+  <p class="meta">
+    {{#labels}}
+      <% entry.labels.each do |x| %>
+        <%= link_to x, :route => :label, :label => x %>
+      <% end %>
+      {{/labels}}
+  </p>
+<% end %>
+</div>
+  {{{c}}}
+<%= link_to "permalink", :route => :entry, :id => e.id, :anchor => "disqus_thread" %>.
+</div>
+<% end %>
+
+<% if pages > 1 %>
+<div class="pageblock">
+<% if page > 0 %> <%= link_to_current "prev", :page => (page - 1), :html_opts => { :class => "pageword" } %>&nbsp;<% end %>
+<% for i in 0...pages %>
+  <% if i == page %><span class="currentpagelink"><%= sprintf "%2d", i %></span><% else %><%= link_to_current sprintf("%2d", i), :page => i, :html_opts => { :class => "pagelink" } %><% end %>
+<% end %>
+<% if page < pages - 1 %>&nbsp;<%= link_to_current "next", :page => (page + 1), :html_opts => { :class => "pageword" } %><% end %>
+</div>
