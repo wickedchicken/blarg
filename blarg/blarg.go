@@ -9,6 +9,7 @@ import (
     "io"
     "appengine"
     "blarg/post"
+    "blarg/config"
     "fmt"
 )
 
@@ -19,19 +20,19 @@ import (
 //    time.Now(),
 //    "")
 
-func List(w http.ResponseWriter, req *http.Request) {
-
+func List(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}) {
   appcontext := appengine.NewContext(req)
 
-  bloginfo := map[string]string { "blog_title": "my blarg!" }
-  static_private := "static_private/"
+  bloginfo := config.Stringify(blog_config)
 
-  h := mustache.RenderFile(static_private + "header.html.mustache", bloginfo)
+  template_dir := "templates/"
+
+  h := mustache.RenderFile(template_dir + "header.html.mustache", bloginfo)
   io.WriteString(w, h)
 
   //context := map[string]string { "c": req.URL.Query().Get(":name") }
   //context := map[string]string { "c": "yolo!" }
-  //c := mustache.RenderFile(static_private + "splash.html.mustache", context)
+  //c := mustache.RenderFile(template_dir + "splash.html.mustache", context)
   //io.WriteString(w, c)
 
   postchan := make(chan post.Post, 16)
@@ -53,7 +54,7 @@ func List(w http.ResponseWriter, req *http.Request) {
   for p := range postchan{
     con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
     context := map[string]string { "c": con }
-    c := mustache.RenderFile(static_private + "splash.html.mustache", context)
+    c := mustache.RenderFile(template_dir + "splash.html.mustache", context)
     io.WriteString(w, c)
   }
 
@@ -64,13 +65,36 @@ func List(w http.ResponseWriter, req *http.Request) {
   }
 
   timing := map[string]string { "render": "0.01s" }
-  f := mustache.RenderFile(static_private + "footer.html.mustache", timing)
+  f := mustache.RenderFile(template_dir + "footer.html.mustache", timing)
   io.WriteString(w, f)
 }
 
+func add_config(f func(http.ResponseWriter, *http.Request, map[string]interface{}), config map[string]interface{}) func(http.ResponseWriter, *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    f(w, req, config)
+  }
+
+  return l
+}
+
+func add_seek(f func(http.ResponseWriter, *http.Request, int, int), start int, limit int) func(http.ResponseWriter, *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    f(w, req, start, limit)
+  }
+
+  return l
+}
+
 func init() {
+  blog_config,err := config.ReadJsonFile("blarg_config.json")
+  if err != nil {
+    panic(err)
+  }
+
+  //limit := blog_config["limit"]
+
   m := pat.New()
-  m.Get("/", http.HandlerFunc(List))
+  m.Get("/", http.HandlerFunc(add_config(List, blog_config)))
   //m.Get("/list/:start", http.HandlerFunc(Index))
   // m.Get("/rss", http.HandlerFunc(Rss))
   // m.Get("/sitemap.xml", http.HandlerFunc(Sitemap))
