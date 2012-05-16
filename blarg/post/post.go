@@ -33,14 +33,15 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, error){
   return p2, err
 }
 
-func ExecuteQuery(c appengine.Context, start int, limit int, out chan<- Post, errout chan<- error){
+func ExecuteQuery(c appengine.Context, q *datastore.Query, start int, limit int, out chan<- Post, errout chan<- error){
 
   defer close(out)
   defer close(errout)
 
-  for t := q.Run(c), i := 0; ; i++ {
+  for t,i := q.Run(c), 0; i < (start + limit) ; i++ {
     var x Post
-    key, err := t.Next(&x)
+    // key, err := t.Next(&x)
+    _, err := t.Next(&x)
 
     if err == datastore.Done {
       return
@@ -53,33 +54,20 @@ func ExecuteQuery(c appengine.Context, start int, limit int, out chan<- Post, er
     if i < start {
       continue
     }
-    if i >= (start + limit) {
-      return
-    }
 
     out <- x
   }
 }
 
-func GetPostsSortedByDate(start int, limit int, out chan<- Post, errout chan<- error){
+func GetCount(c appengine.Context, q *datastore.Query) (int, error){
+  return q.Count(c)
+}
 
-  q := datastore.NewQuery("post").
-          Order("-PostDate").
-          Start(start).
-          Limit(limit)
-  for t := q.Run(c); ; {
-          var x Post
-          key, err := t.Next(&x)
-          if err == datastore.Done {
-                  break
-          }
-          if err != nil {
-                  errout <- err
-                  return
-          }
+func GetPostsSortedByDate() (*datastore.Query){
+  return datastore.NewQuery("post").Order("-Postdate")
+}
 
-          out <- x
-  }
-  close(out)
+func GetPostsMatchingUrl(stickyurl string) (*datastore.Query){
+  return datastore.NewQuery("post").Filter("StickyUrl =", stickyurl).Limit(1)
 }
 

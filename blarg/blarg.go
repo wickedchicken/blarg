@@ -7,32 +7,21 @@ import (
     "blackfriday"
     "bytes"
     "io"
-    "time"
     "appengine"
-    // "encoding/json"
     "blarg/post"
+    "fmt"
 )
+
+
+//  key, err := post.SavePost(appcontext, "awesome post great job",
+//    "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
+//    make([]string, 0),
+//    time.Now(),
+//    "")
 
 func List(w http.ResponseWriter, req *http.Request) {
 
   appcontext := appengine.NewContext(req)
-
-  key, err := post.SavePost(appcontext, "awesome post great job",
-    "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
-    make([]string, 0),
-    time.Now(),
-    "")
-
-  if err != nil {
-      http.Error(w, err.Error(), http.StatusInternalServerError)
-      return
-  }
-
-  p2, err := post.GetPost(appcontext, key)
-  if err != nil {
-      http.Error(w, err.Error(), http.StatusInternalServerError)
-      return
-  }
 
   bloginfo := map[string]string { "blog_title": "my blarg!" }
   static_private := "static_private/"
@@ -45,11 +34,34 @@ func List(w http.ResponseWriter, req *http.Request) {
   //c := mustache.RenderFile(static_private + "splash.html.mustache", context)
   //io.WriteString(w, c)
 
-  //what
-  con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p2.Content).Bytes())).String()
-  context := map[string]string { "c": con }
-  c := mustache.RenderFile(static_private + "splash.html.mustache", context)
-  io.WriteString(w, c)
+  postchan := make(chan post.Post, 16)
+  errchan := make(chan error)
+
+  query := post.GetPostsSortedByDate()
+
+  idx, err := post.GetCount(appcontext, query)
+  if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
+
+  io.WriteString(w, fmt.Sprintf("total dudes = %v", idx))
+
+  go post.ExecuteQuery(appcontext, query, 0, 20, postchan, errchan)
+
+
+  for p := range postchan{
+    con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
+    context := map[string]string { "c": con }
+    c := mustache.RenderFile(static_private + "splash.html.mustache", context)
+    io.WriteString(w, c)
+  }
+
+  err, ok := <-errchan
+  if ok {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
 
   timing := map[string]string { "render": "0.01s" }
   f := mustache.RenderFile(static_private + "footer.html.mustache", timing)
