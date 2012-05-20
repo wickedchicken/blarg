@@ -20,7 +20,7 @@ import (
 //    time.Now(),
 //    "")
 
-func List(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}) {
+func List(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, offset int, limit int) {
   appcontext := appengine.NewContext(req)
 
   bloginfo := config.Stringify(blog_config)
@@ -77,9 +77,12 @@ func add_config(f func(http.ResponseWriter, *http.Request, map[string]interface{
   return l
 }
 
-func add_seek(f func(http.ResponseWriter, *http.Request, int, int), start int, limit int) func(http.ResponseWriter, *http.Request){
+func add_seek(f func(http.ResponseWriter, *http.Request, int, int), pagename string, limit int) func(http.ResponseWriter, *http.Request){
   l := func(w http.ResponseWriter, req *http.Request){
-    f(w, req, start, limit)
+    var page int
+    _,err := fmt.Scanf("%d", &page, req.URL.Query().Get(pagename))
+    offset := int(page) * limit
+    f(w, req, offset, limit)
   }
 
   return l
@@ -91,17 +94,27 @@ func init() {
     panic(err)
   }
 
+  root := blog_config["blog_root"] // test for default
+
+  var limit int
+  _,err = fmt.Scanf("%d", &limit, blog_config["post_limit"])
+  if err != nil {
+    panic(err)
+  }
+
   //limit := blog_config["limit"]
 
+  listhandler := add_seek(add_config(List, blog_config), ":page")
+
   m := pat.New()
-  m.Get("/", http.HandlerFunc(add_config(List, blog_config)))
+  m.Get("/", http.HandlerFunc(listhandler))
+  m.Get("/index", http.HandlerFunc(listhandler))
+  m.Get("/index/:page", http.HandlerFunc(listhandler))
   //m.Get("/list/:start", http.HandlerFunc(Index))
   // m.Get("/rss", http.HandlerFunc(Rss))
   // m.Get("/sitemap.xml", http.HandlerFunc(Sitemap))
   //m.Get("/item/:item", http.HandlerFunc(Lookup))
   //m.Get("/admin", http.HandlerFunc(Admin))
 
-  // Register this pat with the default serve mux so that other packages
-  // may also be exported. (i.e. /debug/pprof/*)
-  http.Handle("/", m)
+  http.Handle(root, m)
 }
