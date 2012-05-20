@@ -9,6 +9,6 @@ to automate away administering a blog -- Google Analytics, Disqus, Papertrail,
 Librato Metrics and AdSense can be enabled by adding the appropriate auth code
 to the configuration file.
 
-<---
+<!---
 vim:tw=80
 -->
