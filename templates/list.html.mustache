@@ -1,3 +1,12 @@
+{{#pb}}
+<div class="pageblock">
+<% for i in 0...pages %>
+  <% if i == page %><span class="currentpagelink"><%= sprintf "%2d", i %></span><% else %><%= link_to_current sprintf("%2d", i), :page => i, :html_opts => { :class => "pagelink" } %><% end %>
+  {{{prev_page}}}
+{{{next_page}}}
+</div>
+{{/pb}}
+
 <p> </p>
 <hr />
 <script type="text/javascript"><!--

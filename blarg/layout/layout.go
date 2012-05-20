@@ -40,30 +40,51 @@ func getOffset(req *http.Request, limit int, pagename string) (int, error){
   return offset, nil
 }
 
-func list(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, offset int, limit int, query *datastore.Query) {
+func labels(tags []string, blog_config map[string]interface{}) string{
+  root := config.Stringify(blog_config["root"])
+  labels := bytes.NewBufferString("")
+
+  for _,l := range tags{
+    if l != "all posts" && l != "sidebar" {
+      fmt.Fprintf(labels, "<a href=\"%s/label/%s\">%s</a>", root, l, l)
+    }
+  }
+
+  return string(labels.Bytes())
+}
+
+func list(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, url_stem string, offset int, limit int, queries []*datastore.Query) {
 
   template_dir := "templates/"
 
   appcontext := appengine.NewContext(req)
 
-//  _, err := post.SavePost(appcontext, "awesome post great job",
-//    "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
-//    make([]string, 0),
-//    time.Now(),
-//    "")
-//  if err != nil{
-//      http.Error(w, err.Error(), http.StatusInternalServerError)
-//      return
-//  }
-
-  postchan := make(chan post.Post, 16)
-  errchan := make(chan error)
-
-  idx, err := post.GetCount(appcontext, query)
+  _, err := post.SavePost(appcontext, "awesome post great job",
+    "chickens\n======\n\nchickens are *boss*. look at this:\n\n* chickens are tasty\n* chickens are not green\n* you too can be a chicken with focused thought",
+    make([]string, 0),
+    time.Now())
   if err != nil{
       http.Error(w, err.Error(), http.StatusInternalServerError)
       return
   }
+
+  postchan := make(chan post.FullPost, 16)
+  errchan := make(chan error)
+
+  keys, err := post.UniquePosts(appcontext, queries)
+  if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
+
+  idx := len(keys)
+
+  pages := idx / limit
+  if (idx % limit) > 0{
+    pages += 1
+  }
+
+  curpage := offset / limit
 
   io.WriteString(w, fmt.Sprintf("<div class=\"entry\"><p>total dudes = %v</p></div>", idx))
 
@@ -71,12 +92,13 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
     io.WriteString(w, fmt.Sprintf("<div class=\"entry\"><p>no posts found :(</p></div>"))
   } else {
     fmt.Printf("noooo %d %d\n", offset, limit)
-    go post.ExecuteQuery(appcontext, query, offset, limit, postchan, errchan)
+    //go post.ExecuteQuery(appcontext, query, offset, limit, postchan, errchan)
+    go post.GetPosts(appcontext, keys, offset, limit, postchan, errchan)
 
     for p := range postchan{
       fmt.Printf("yayyyyyy!\n")
-      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
-      context := map[string]interface{} { "c": con }
+      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.PostStruct.Content).Bytes())).String()
+      context := map[string]interface{} { "c": con, "labels": labels(p.Tags, blog_config) }
       total_con := config.Stringify_map(config.Merge(blog_config, context))
       c := mustache.RenderFile(template_dir + "list_entry.html.mustache", total_con)
       io.WriteString(w, c)
@@ -86,6 +108,18 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
     if ok {
         http.Error(w, err.Error(), http.StatusInternalServerError)
     }
+
+    context := map[string]interface{} {}
+
+    root := config.Stringify(blog_config["root"])
+
+    if pages > 1 { context["pb"] = "true" }
+    if curpage > 0 { context["prev_page"] = fmt.Sprintf("<a href=\"%v/%v/%v\">prev</a>", root, url_stem, curpage - 1) }
+    if curpage < (pages - 1) { context["next_page"] = fmt.Sprintf("<a href=\"%v/%v/%v\">next</a>", root, url_stem, curpage + 1) }
+
+    total_con := config.Stringify_map(config.Merge(blog_config, context))
+    c := mustache.RenderFile(template_dir + "list.html.mustache", total_con)
+    io.WriteString(w, c)
   }
 }
 
@@ -117,7 +151,7 @@ func sidebar(w http.ResponseWriter, req *http.Request, blog_config map[string]in
 func std_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter, req *http.Request))func(w http.ResponseWriter, req *http.Request){
   bloginfo := config.Stringify_map(blog_config)
 
-  fmt.Printf("yess %s\n", bloginfo["blog_config"])
+  fmt.Printf("yess %s\n", bloginfo["search_label"])
 
   p := func(w http.ResponseWriter, req *http.Request){
     start := time.Now()
@@ -143,20 +177,19 @@ func std_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter
   return p
 }
 
-func IndexListHandler(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
+func IndexListHandler(blog_config map[string]interface{}, url_stem string)func(w http.ResponseWriter, req *http.Request){
   limit,err := getLimit(blog_config)
   if err != nil{
     panic(err)
   }
 
   l := func(w http.ResponseWriter, req *http.Request){
-
-    list(w, req, blog_config, 0, limit, post.GetPostsSortedByDate())
+    list(w, req, blog_config, url_stem, 0, limit, post.GetPostsNotMatchingTag("sidebar"))
   }
   return std_layout(blog_config, l)
 }
 
-func IndexPageHandler(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
+func IndexPageHandler(blog_config map[string]interface{}, url_stem string)func(w http.ResponseWriter, req *http.Request){
   l := func(w http.ResponseWriter, req *http.Request){
     limit,err := getLimit(blog_config)
     if err != nil{
@@ -166,10 +199,59 @@ func IndexPageHandler(blog_config map[string]interface{})func(w http.ResponseWri
     if err != nil{
         http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
     } else {
-      list(w, req, blog_config, offset, limit, post.GetPostsSortedByDate())
+      list(w, req, blog_config, url_stem, offset, limit, post.GetPostsNotMatchingTag("sidebar"))
     }
   }
   return std_layout(blog_config, l)
 }
 
+func LabelPage(blog_config map[string]interface{}, url_stem string)func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    label := req.URL.Query().Get(":label")
+    context := map[string]interface{} { "search_label": label}
+    total_con := config.Merge(blog_config, context)
+    q := func(w http.ResponseWriter, req *http.Request){
+      fmt.Printf("yooooooo %v\n", label)
+      limit,err := getLimit(blog_config)
+      if err != nil{
+        panic(err)
+      }
+      offset, err := getOffset(req, limit, ":page")
+      if err != nil{
+          http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
+      } else {
+        list(w, req, total_con, url_stem, offset, limit, post.GetPostsMatchingTag(label))
+      }
+    }
+    std_layout(total_con, q)(w, req)
+  }
 
+  return l
+}
+
+func LabelList(blog_config map[string]interface{}, url_stem string)func(w http.ResponseWriter, req *http.Request){
+  limit,err := getLimit(blog_config)
+  if err != nil{
+    panic(err)
+  }
+
+  l := func(w http.ResponseWriter, req *http.Request){
+    label := req.URL.Query().Get(":label")
+    fmt.Printf("yooooooo %v\n", label)
+    context := map[string]interface{} { "search_label": label}
+    total_con := config.Merge(blog_config, context)
+    q := func(w http.ResponseWriter, req *http.Request){
+      list(w, req, total_con, url_stem, 0, limit, post.GetPostsMatchingTag(label))
+    }
+    std_layout(total_con, q)(w, req)
+  }
+
+  return l
+}
+
+func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    //article := posts
+  }
+  return std_layout(blog_config, l)
+}
