@@ -11,8 +11,8 @@
 <body>
   <div id="header">
     <div id="logo">
-      <h1> <a href="{{{blog_link}}}">{{{blog_title}}}</a></h1>
-      <p><{{{tagline}}}/p>
+      <h1> <a href="{{{blog_root}}}">{{{blog_title}}}</a></h1>
+      <p>{{{tagline}}}</p>
     </div>
 
     <div style="float:right">
@@ -25,10 +25,8 @@
 
 
   {{#search_label}}
-  <div class="malert">Showing only posts with label "{{{search_label}}}". <a href="{{{blog_link}}}">See all posts instead.</a>
+  <div class="malert">Showing only posts with label "{{{search_label}}}". <a href="{{{blog_root}}}">See all posts instead.</a>
     {{/search_label}}
   <div id="main">
 
   <div id="content">
-    {{{content}}}
-  </div>

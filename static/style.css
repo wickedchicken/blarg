@@ -320,3 +320,7 @@ ul.sidebar-list {
 ul.sidebar-list li {
   margin-bottom: 5px;
 }
+
+span.slow {
+  color: #ea0000;
+}
