@@ -304,6 +304,15 @@ form[name=edit] textarea {
 	height: 25em;
 }
 
+div.pageblock {
+  font-size: 120%;
+  margin-bottom: -0.8ex;
+}
+
+span.nextpage {
+  float: right;
+}
+
 #sidebar {
   font-size: 85%;
   width: 100px;

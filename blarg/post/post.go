@@ -88,18 +88,25 @@ func SavePost(context appengine.Context, title string, content string, tags []st
   return postkey, nil
 }
 
-func GetPost(context appengine.Context, key *datastore.Key) (Post, []string, error){
-  var p2 Post
-  err := datastore.Get(context, key, &p2)
-  if err != nil { return p2, nil, err }
+func GetTagSlice(context appengine.Context, key *datastore.Key) ([]string, error){
   var tagstructs []Tag
-  _,err = (GetTagsAssociatedWithPost(key).GetAll(context, &tagstructs))
-  if err != nil { return p2, nil, err }
+  _,err := (GetTagsAssociatedWithPost(key).GetAll(context, &tagstructs))
+  if err != nil { return nil, err }
 
   tags := make([]string, len(tagstructs))
   for i,ts := range tagstructs{
     tags[i] = ts.Name
   }
+
+  return tags, nil
+}
+
+func GetPost(context appengine.Context, key *datastore.Key) (Post, []string, error){
+  var p2 Post
+  err := datastore.Get(context, key, &p2)
+  if err != nil { return p2, nil, err }
+  tags, err := GetTagSlice(context, key)
+  if err != nil { return p2, nil, err }
 
   return p2, tags, err
 }
@@ -166,29 +173,33 @@ func ExecuteQuery(c appengine.Context, q *datastore.Query, start int, limit int,
   defer close(out)
   defer close(errout)
 
-  for t,i := q.Run(c), 0; i < (start + limit) ; i++ {
-    var x Post
-    // key, err := t.Next(&x)
-    _, err := t.Next(&x)
+  for t,i := q.Run(c), 0;  ; i++ {
+    if ((start < 0) || (limit < 0)) || (i < (start + limit)){
+      var x Post
+      // key, err := t.Next(&x)
+      _, err := t.Next(&x)
 
-    if err == datastore.Done {
-      return
-    }
-    if err != nil {
-      errout <- err
-      return
-    }
+      if err == datastore.Done {
+        return
+      }
+      if err != nil {
+        errout <- err
+        return
+      }
 
-    if !filter(x) {
-      i--
-      continue
-    }
+      if !filter(x) {
+        i--
+        continue
+      }
 
-    if i < start {
-      continue
-    }
+      if i < start {
+        continue
+      }
 
-    out <- x
+      out <- x
+    } else {
+      break
+    }
   }
 }
 
@@ -219,3 +230,42 @@ func GetPostsMatchingUrl(stickyurl string) (*datastore.Query){
   return datastore.NewQuery("post").Filter("StickyUrl =", stickyurl).Limit(1)
 }
 
+func GetAllPosts() (*datastore.Query){
+  return datastore.NewQuery("post")
+}
+
+func GetAllTags(context appengine.Context) ([]string,[]int, error){
+  seen := map[string]int {}
+
+  query := datastore.NewQuery("tag")
+  var rawtags Tags
+  _,err := query.GetAll(context, &rawtags)
+  if err != nil { return nil, nil, err }
+
+  for _,t := range rawtags{
+    if _,ok := seen[t.Name]; !ok {
+      seen[t.Name] = 1
+    } else {
+      seen[t.Name] += 1
+    }
+  }
+
+  delete(seen, "all posts")
+  delete(seen, "static")
+
+  tags := make([]string, len(seen))
+  counts := make([]int, len(seen))
+
+  i := 0
+  for k := range seen {
+    tags[i] = k
+  }
+
+  sort.Strings(tags)
+
+  for i,v := range tags {
+    counts[i] = seen[v]
+  }
+
+  return tags, counts, nil
+}

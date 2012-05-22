@@ -1,18 +1,17 @@
 {{#pb}}
+<hr />
 <div class="pageblock">
-<% for i in 0...pages %>
-  <% if i == page %><span class="currentpagelink"><%= sprintf "%2d", i %></span><% else %><%= link_to_current sprintf("%2d", i), :page => i, :html_opts => { :class => "pagelink" } %><% end %>
-  {{{prev_page}}}
-{{{next_page}}}
+{{{prev_page}}}
+<span class="nextpage">{{{next_page}}}</span>
 </div>
 {{/pb}}
 
 <p> </p>
+{{#as_list_code}}
 <hr />
 <script type="text/javascript"><!--
-google_ad_client = "ca-pub-4030105606450175";
-/* giant ad */
-google_ad_slot = "0180354197";
+google_ad_client = "{{{as_client}}}";
+google_ad_slot = "{{{as_list_code}}}";
 google_ad_width = 468;
 google_ad_height = 60;
 //-->
@@ -20,9 +19,11 @@ google_ad_height = 60;
 <script type="text/javascript"
 src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
 </script>
+{{/as_list_code}}
 
+{{#disqus_shortname}}
 <script type="text/javascript">
-  var disqus_shortname = 'outerhaven';
+  var disqus_shortname = "{{{disqus_shortname}}}"
   (function () {
       var s = document.createElement('script'); s.async = true;
       s.type = 'text/javascript';
@@ -30,3 +31,4 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
       (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
   }());
 </script>
+{{/disqus_shortname}}

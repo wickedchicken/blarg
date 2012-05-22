@@ -12,29 +12,24 @@
 </script>
 {{/discus_shortname}}
 <div class="post">
-    <p class="date" title="{{{post_date_since_now}}}">{{{post_date}}}</p>
+    <p class="date" >{{{post_date}}}</p>
 <div class="entry">
-<h2>{{{link_to_entry}}}</h2>
-
-    <p class="meta">
-    {{#labels}}
-      <% entry.labels.each do |x| %>
-        <%= link_to x, :route => :label, :label => x %>
-      <% end %>
-      {{/labels}}
-    </p>
-
+<h2><a href="{{{link_to_entry}}}">{{{post_title}}}</a></h2>
+{{#labels}}
+  <p class="meta">
+    {{{labels}}}
+  </p>
+{{/labels}}
 
 </div>
 {{{c}}}
 
 <p> </p>
 
-{{#as_post_code}}}
+{{#as_post_code}}
 <hr />
 <script type="text/javascript"><!--
 google_ad_client = "{{{as_client}}}";
-/* giant ad */
 google_ad_slot = "{{{as_post_code}}}";
 google_ad_width = 468;
 google_ad_height = 60;
@@ -50,14 +45,14 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
 <hr />
 
 <a href="#comment_box" onclick="toggle_visibility('comment_box');">show/hide comment box</a>
-<div id="comment_box" style="display: none">
+<div id="comment_box" style="display: {{{comment_display}}}">
 <a name="comments"></a>
 <div id="disqus_thread"></div>
 <script type="text/javascript">
     var disqus_shortname = '{{{discus_shortname}}}'; // required: replace example with your forum shortname
 
-    var disqus_identifier = <%= "\'" + url_for_current + "\'" %>;
-    var disqus_url = <%= "\'" + full_url_for_current + "\'" %>;
+    var disqus_identifier = {{{link_to_entry}}};
+    var disqus_url = {{{app_url}}}{{{link_to_entry}}};
 
     (function() {
         var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
@@ -70,3 +65,4 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
 </div>
 </div>
 {{/discus_shortname}}
+</div>

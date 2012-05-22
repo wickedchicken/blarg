@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /label/
+Sitemap: http://www.example.com/sitemap.xml

@@ -1,7 +1,7 @@
 <div class="post">
-  <p class="date" title="{{{post_date_since_now}}}">{{{post_date}}}</p>
+  <p class="date">{{{post_date}}}</p>
 <div class="entry">
-<h2>{{{link_to_entry}}}</h2>
+<h2><a href="{{{link_to_entry}}}">{{{post_title}}}</a></h2>
 {{#labels}}
   <p class="meta">
     {{{labels}}}
@@ -9,5 +9,5 @@
 {{/labels}}
 </div>
   {{{c}}}
-<%= link_to "permalink", :route => :entry, :id => e.id, :anchor => "disqus_thread" %>.
+  <a  href="{{{app_url}}}{{{link_to_entry}}}#disqus_thread">permalink</a>.
 </div>

@@ -31,15 +31,14 @@ func init() {
   m.Get(root + "label/:label", http.HandlerFunc(layout.LabelList(blog_config, "label")))
   m.Get(root + "label/", http.HandlerFunc(http.NotFound))
 
+  m.Get(root + "sitemap.xml", http.HandlerFunc(layout.GetSitemap(blog_config)))
+
   // matching on / will match all URLs
   // so you have to catch invalid top-level URLs first
-
   m.Get(root + ":invalid/", http.HandlerFunc(http.NotFound))
   m.Get(root , http.HandlerFunc(layout.IndexListHandler(blog_config, "list")))
 
   // m.Get("/rss", http.HandlerFunc(Rss))
-  // m.Get("/sitemap.xml", http.HandlerFunc(Sitemap))
-  //m.Get("/item/:item", http.HandlerFunc(Lookup))
   //m.Get("/admin", http.HandlerFunc(Admin))
 
   http.Handle(root, m)
