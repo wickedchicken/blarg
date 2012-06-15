@@ -2,8 +2,8 @@ package layout
 
 import (
     "net/http"
-    "mustache"
-    "blackfriday"
+    "github.com/hoisie/mustache"
+    "github.com/russross/blackfriday"
     "bytes"
     "io"
     "appengine"
