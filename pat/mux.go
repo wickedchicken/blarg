@@ -157,6 +157,11 @@ func (p *PatternServeMux) Del(pat string, h http.Handler) {
 	p.Add("DELETE", pat, h)
 }
 
+// Options will register a pattern with a handler for OPTIONS requests.
+func (p *PatternServeMux) Options(pat string, h http.Handler) {
+	p.Add("OPTIONS", pat, h)
+}
+
 // Add will register a pattern with a handler for meth requests.
 func (p *PatternServeMux) Add(meth, pat string, h http.Handler) {
 	p.handlers[meth] = append(p.handlers[meth], &patHandler{pat, h})
@@ -203,20 +208,11 @@ type patHandler struct {
 
 func (ph *patHandler) try(path string) (url.Values, bool) {
 	p := make(url.Values)
-
-  if len(ph.pat) == 1 && ph.pat[0] == '/' {
-    if len(path) == 1 && path[0] == '/'{
-      return p, true
-    } else {
-      return nil, false
-    }
-  }
-
 	var i, j int
 	for i < len(path) {
 		switch {
 		case j >= len(ph.pat):
-			if ph.pat[len(ph.pat)-1] == '/' {
+			if ph.pat != "/" && len(ph.pat) > 0 && ph.pat[len(ph.pat)-1] == '/' {
 				return p, true
 			}
 			return nil, false

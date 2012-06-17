@@ -1,21 +1,6 @@
   <div id="footer" style="margin: 0px;">
-    <a href="https://github.com/wickedchicken/blarg">blarg</a> ({{{timing}}}{{#slow_code}} <span class="slow">slow</span>{{/slow_code}}). <a href="{{{blog_link}}}">html</a> / <a href="/index.rss">rss</a>. cc <a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/">by/sa</a>. design based on <a href="http://adam.heroku.com/past/2008/11/4/scanty_the_blog_thats_almost_nothing/">scanty</a>. powered by <a href="https://developers.google.com/appengine/">clouds</a>.
+    <a href="https://github.com/wickedchicken/blarg">blarg</a> ({{{timing}}}{{#slow_code}} <span class="slow">slow</span>{{/slow_code}}). <a href="{{{blog_link}}}">html</a> / <a href="/index.rss">rss</a>. cc <a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/">by/sa</a>. design based on <a href="http://adam.heroku.com/past/2008/11/4/scanty_the_blog_thats_almost_nothing/">scanty</a>. powered by <a href="https://developers.google.com/appengine/">clouds</a>. {{#logout}}<p>logged in as {{me}}. <a href="{{{logout}}}">log out</a>.</p>{{/logout}}
   </div>
 </div>
-
-{{#ga_code}}
-<script type="text/javascript">
-  var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-  document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-  try {
-    var pageTracker = _gat._getTracker("{{{ga_code}}}");
-    pageTracker._setDomainName("none");
-    pageTracker._setAllowLinker(true);
-    pageTracker._trackPageview();
-  } catch(err) {}</script>
-{{/ga_code}}
-
 </body>
 </html>

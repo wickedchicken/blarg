@@ -7,5 +7,6 @@
   "as_post_code": "04123-adslot-for-single-entry",
   "as_list_code": "04123-adslot-for-list-view",
   "ga_code": "UA-google-analytics-code",
+  "ga_domain": "myblarg.com",
   "disqus_shortname": "myblarg-disqus-shortname"
 }

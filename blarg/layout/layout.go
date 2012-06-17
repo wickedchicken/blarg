@@ -2,16 +2,21 @@ package layout
 
 import (
     "net/http"
-    "github.com/hoisie/mustache"
-    "github.com/russross/blackfriday"
     "bytes"
     "io"
+    "encoding/json"
     "appengine"
     "blarg/post"
     "blarg/config"
     "fmt"
+    "strings"
     "appengine/datastore"
+    "appengine/user"
     "time"
+    "appengine/channel"
+    "math/rand"
+    "github.com/russross/blackfriday"
+    "github.com/hoisie/mustache"
 )
 
 func getLimit(blog_config map[string]interface{}) (int, error){
@@ -46,7 +51,7 @@ func labels(tags []string, blog_config map[string]interface{}) string{
 
   for _,l := range tags{
     if l != "all posts" && l != "static" {
-      fmt.Fprintf(labels, "<a href=\"%slabel/%s\">%s</a>", root, l, l)
+      fmt.Fprintf(labels, "<a href=\"%slabel/%s\">%s</a> ", root, l, l)
     }
   }
 
@@ -103,6 +108,7 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
     err, ok := <-errchan
     if ok {
         http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
     }
 
     context := map[string]interface{} {}
@@ -170,7 +176,6 @@ func std_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter
     }
     context := map[string]interface{} { "app_url": scheme + myurl + config.Stringify(blog_config["blog_root"])}
 
-
     bloginfo := config.Stringify_map(config.Merge(blog_config,context))
 
     start := time.Now()
@@ -189,6 +194,19 @@ func std_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter
     if delta > 0.100 {
       timing["slow_code"] = "true"
     }
+
+    u := user.Current(appcontext)
+    if u != nil{
+      logout,err := user.LogoutURL(appcontext, "/")
+      if err != nil {
+          http.Error(w, "error generating logout URL!", http.StatusInternalServerError)
+          appcontext.Errorf("user.LogoutURL: %v", err)
+          return
+      }
+      timing["me"] = fmt.Sprintf("%s", u)
+      timing["logout"] = logout
+    }
+
     bloginfo = config.Stringify_map(config.Merge(blog_config,timing))
     f := mustache.RenderFile(template_dir + "footer.html.mustache", bloginfo)
     io.WriteString(w, f)
@@ -218,6 +236,7 @@ func IndexPageHandler(blog_config map[string]interface{}, url_stem string)func(w
     offset, err := getOffset(req, limit, ":page")
     if err != nil{
         http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
+        return
     } else {
       list(w, req, blog_config, url_stem, offset, limit, post.GetPostsNotMatchingTag("static"))
     }
@@ -238,6 +257,7 @@ func LabelPage(blog_config map[string]interface{}, url_stem string)func(w http.R
       offset, err := getOffset(req, limit, ":page")
       if err != nil{
           http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
+          return
       } else {
         list(w, req, total_con, url_stem, offset, limit, post.GetPostsMatchingTag(label))
       }
@@ -276,11 +296,13 @@ func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.
 
     if err != nil{
       http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
     }
 
     if idx < 1 {
       http.Error(w, err.Error(), http.StatusNotFound)
       io.WriteString(w, fmt.Sprintf("<div class=\"entry\"><p>no posts found :(</p></div>"))
+      return
     } else {
 
       myurl := appengine.DefaultVersionHostname(appcontext)
@@ -295,12 +317,14 @@ func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.
       keys, err := query.GetAll(appcontext, &ps)
       if err != nil{
         http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
       }
 
       p := ps[0]
       tags, err := post.GetTagSlice(appcontext, keys[0])
       if err != nil{
         http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
       }
 
       con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
@@ -337,6 +361,11 @@ func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, r
 
     entries := bytes.NewBufferString("")
 
+    me_context := map[string]interface{} { "url": urlprefix,
+                                        "lastmod_date":  post.GetLatestDate(appcontext).Format("2006-01-02")}
+    me_total_con := config.Stringify_map(config.Merge(blog_config, me_context))
+    me_c := mustache.RenderFile(template_dir + "sitemap_entry.mustache", me_total_con)
+    io.WriteString(entries, me_c)
     for p := range postchan{
       context := map[string]interface{} { "url": urlprefix + "article/" + p.StickyUrl,
                                           "lastmod_date":  p.Postdate.Format("2006-01-02")}
@@ -348,11 +377,298 @@ func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, r
     err, ok := <-errchan
     if ok {
         http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
     }
     context := map[string]interface{} {"content": entries}
     total_con := config.Stringify_map(config.Merge(blog_config, context))
     c := mustache.RenderFile(template_dir + "sitemap.mustache", total_con)
     io.WriteString(w, c)
+  }
+  return l
+}
+
+func entrybar(blog_config map[string]interface{}, w http.ResponseWriter, req *http.Request){
+  template_dir := "templates/"
+  appcontext := appengine.NewContext(req)
+  myurl := appengine.DefaultVersionHostname(appcontext)
+  scheme := "http://"
+  if req.TLS != nil {
+    scheme = "https://"
+  }
+
+  urlprefix := scheme + myurl + config.Stringify(blog_config["blog_root"])
+
+  postchan := make(chan post.Post, 16)
+  errchan := make(chan error)
+  go post.ExecuteQuery(appcontext, post.GetAllPosts(), -1, -1, func(post.Post)bool{ return true },postchan, errchan)
+
+  for p := range postchan{
+    context := map[string]interface{} { "url": urlprefix + "article/" + p.StickyUrl,
+                                        "lastmod_date":  p.Postdate.Format("2006-01-02")}
+    total_con := config.Stringify_map(config.Merge(blog_config, context))
+    c := mustache.RenderFile(template_dir + "edit_entrybar.html.mustache", total_con)
+    io.WriteString(w, c)
+  }
+
+  err, ok := <-errchan
+  if ok {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
+}
+
+func admin_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter, req *http.Request))func(w http.ResponseWriter, req *http.Request){
+
+  p := func(w http.ResponseWriter, req *http.Request){
+    appcontext := appengine.NewContext(req)
+    myurl := appengine.DefaultVersionHostname(appcontext)
+    scheme := "http://"
+    if req.TLS != nil {
+      scheme = "https://"
+    }
+    context := map[string]interface{} { "app_url": scheme + myurl + config.Stringify(blog_config["blog_root"])}
+
+
+    logout,err := user.LogoutURL(appcontext, "/")
+    if err != nil {
+        http.Error(w, "error generating logout URL!", http.StatusInternalServerError)
+        appcontext.Errorf("user.LogoutURL: %v", err)
+        return
+    }
+    u := user.Current(appcontext)
+    context["me"] = fmt.Sprintf("%s", u)
+    context["logout"] = logout
+
+    bloginfo := config.Stringify_map(config.Merge(blog_config,context))
+
+    start := time.Now()
+    template_dir := "templates/"
+
+    h := mustache.RenderFile(template_dir + "header.admin.html.mustache", bloginfo)
+    io.WriteString(w, h)
+
+    f(w,req)
+
+    delta := time.Since(start).Seconds()
+
+    timing := map[string]interface{} { "timing": fmt.Sprintf("%0.2fs", delta) }
+    if delta > 0.100 {
+      timing["slow_code"] = "true"
+    }
+
+    bloginfo = config.Stringify_map(config.Merge(blog_config,timing))
+    f := mustache.RenderFile(template_dir + "footer.admin.html.mustache", bloginfo)
+    io.WriteString(w, f)
+  }
+  return p
+}
+
+func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
+ //opentoken
+ //renderpage
+ //sendrendertext
+  template_dir := "templates/"
+  l := func(w http.ResponseWriter, req *http.Request){
+    appcontext := appengine.NewContext(req)
+
+    context := map[string]interface{} {}
+
+    name := req.URL.Query().Get(":name")
+    if name != ""{
+      query := post.GetPostsMatchingUrl(req.URL.Query().Get(":name"))
+      idx,err := post.GetCount(appcontext, query)
+
+      if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+      }
+
+      if idx < 1 {
+        context["articlesource"] = "Enter your post here!"
+        context["labels"] = ""
+        context["title"] = "No post with that URL found, making new post!"
+      } else {
+        var ps []post.Post
+        keys, err := query.GetAll(appcontext, &ps)
+        if err != nil{
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+
+        p := ps[0]
+        tags, err := post.GetTagSlice(appcontext, keys[0])
+        if err != nil{
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+
+        context["articlesource"] = p.Content
+        context["labels"] = strings.Join(tags, ", ")
+        context["title"] = p.Title
+      }
+    }  else {
+      context["articlesource"] = "Enter your post here!"
+      context["labels"] = "enter, labels, here"
+      context["title"] = "enter title here"
+    }
+
+    key := fmt.Sprintf("%v", rand.Int())
+    tok, err := channel.Create(appcontext, key)
+    if err != nil {
+        http.Error(w, "Couldn't create Channel", http.StatusInternalServerError)
+        appcontext.Errorf("channel.Create: %v", err)
+        return
+    }
+
+    context["token"] = tok
+    context["session"] = key
+
+    total_con := config.Stringify_map(config.Merge(blog_config, context))
+    c := mustache.RenderFile(template_dir + "edit.html.mustache", total_con)
+    io.WriteString(w, c)
+
+    if err != nil {
+        appcontext.Errorf("mainTemplate: %v", err)
+    }
+  }
+  return admin_layout(blog_config, l)
+}
+
+func GetPostText(blog_config map[string]interface{}) func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    appcontext := appengine.NewContext(req)
+    query := post.GetPostsMatchingUrl(req.URL.Query().Get(":name"))
+    idx,err := post.GetCount(appcontext, query)
+
+    if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+
+    if idx < 1 {
+      http.Error(w, err.Error(), http.StatusNotFound)
+      io.WriteString(w, fmt.Sprintf("<div class=\"entry\"><p>no posts found :(</p></div>"))
+    } else {
+      var ps []post.Post
+      _, err := query.GetAll(appcontext, &ps)
+      if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+      }
+
+      p := ps[0]
+
+      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
+      io.WriteString(w, con)
+    }
+  }
+  return l
+}
+
+func RenderPost(blog_config map[string]interface{}) func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    appcontext := appengine.NewContext(req)
+    data := req.FormValue("data")
+    if data == ""{
+      http.Error(w, "did not specify data as a param", http.StatusBadRequest)
+      return
+    }
+
+    key := req.FormValue("g")
+    if key == ""{
+      http.Error(w, "did not specify a key!", http.StatusBadRequest)
+      return
+    }
+
+    var decoded interface{}
+    err := json.Unmarshal(bytes.NewBufferString(data).Bytes(), &decoded)
+    if err != nil {
+      http.Error(w, err.Error(), http.StatusBadRequest)
+      return
+    }
+
+    q := decoded.(map[string]interface{})
+    str,ok := q["data"]
+    if !ok{
+      http.Error(w, "error: must supply JSON with 'data' specified!", http.StatusBadRequest)
+      return
+    }
+
+    con := map[string]interface{} {"markdown": bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(fmt.Sprintf("%v", str)).Bytes())).String()}
+    err = channel.SendJSON(appcontext, key, con)
+    if err != nil {
+        appcontext.Errorf("sending markdown payload: %v", err)
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+  }
+  return l
+}
+
+func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    appcontext := appengine.NewContext(req)
+    key := req.FormValue("g")
+    if key == ""{
+      http.Error(w, "did not specify a key!", http.StatusBadRequest)
+      return
+    }
+
+    send_message := func(stat string, color string){
+      con := map[string]interface{} {"status": stat, "color": color}
+      err := channel.SendJSON(appcontext, key, con)
+      if err != nil {
+          appcontext.Errorf("sending update message: %v", err)
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+      }
+    }
+
+    data := req.FormValue("data")
+    if data == ""{
+      http.Error(w, "did not specify data as a param", http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+
+    var decoded interface{}
+    err := json.Unmarshal(bytes.NewBufferString(data).Bytes(), &decoded)
+    if err != nil {
+      http.Error(w, err.Error(), http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+
+    q := decoded.(map[string]interface{})
+    str,ok := q["data"].(string)
+    if !ok{
+      http.Error(w, "error: must supply JSON with 'data' specified!", http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+    title,ok := q["title"].(string)
+    if !ok{
+      http.Error(w, "error: must supply JSON with 'title' specified!", http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+    labels,ok := q["labels"].(string)
+    if !ok{
+      http.Error(w, "error: must supply JSON with 'labels' specified!", http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+    individual_labels := strings.Split(labels, ",")
+    real_labels := make([]string, len(individual_labels))
+    for i := range individual_labels{
+      real_labels[i] = strings.ToLower(strings.Trim(individual_labels[i], " \t"))
+    }
+
+    _, err = post.SavePost(appcontext, title, str, real_labels, time.Now());
+    if err != nil{
+      appcontext.Errorf("saving a post: %v", err)
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+
+    send_message("saved", "#00AA00")
   }
   return l
 }

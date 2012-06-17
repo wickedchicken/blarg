@@ -6,6 +6,7 @@ import (
     "time"
     "strings"
     "sort"
+    "fmt"
 )
 
 type Post struct {
@@ -112,8 +113,7 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, []string, err
 }
 
 func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*datastore.Key, error){
-  tags := make(Tags, 0)
-  seen := map[*datastore.Key]bool {}
+  seen := map[datastore.Key]bool {}
 
   for _,query := range queries{
     var rawtags Tags
@@ -121,18 +121,21 @@ func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*data
     if err != nil { return nil, err }
 
     for _,t := range rawtags{
-      if _,ok := seen[t.PostKey]; !ok {
-        seen[t.PostKey] = true
-        tags = append(tags, t)
+      if !seen[*(t.PostKey)] {
+        fmt.Printf("nope! %v\n", seen)
+        seen[*(t.PostKey)] = true
       }
     }
   }
 
-  sort.Sort(tags)
-  keys := make([]*datastore.Key, len(tags))
+  keys := make([]*datastore.Key, len(seen))
 
-  for i := range tags{
-    keys[i] = tags[i].PostKey
+  fmt.Printf("seen! %v\n", seen)
+
+  i := 0
+  for k := range seen{
+    keys[i] = &k
+    i += 1
   }
 
   return keys, nil
@@ -234,6 +237,17 @@ func GetAllPosts() (*datastore.Query){
   return datastore.NewQuery("post")
 }
 
+func GetLatestDate(context appengine.Context)(time.Time){
+  q := datastore.NewQuery("post").Order("-Postdate")
+  var mePosts []Post
+  _,err := q.Limit(1).GetAll(context, &mePosts)
+  if err != nil { return time.Now() }
+  if len(mePosts) < 1{
+    return time.Now()
+  }
+  return mePosts[0].Postdate
+}
+
 func GetAllTags(context appengine.Context) ([]string,[]int, error){
   seen := map[string]int {}
 
@@ -259,6 +273,7 @@ func GetAllTags(context appengine.Context) ([]string,[]int, error){
   i := 0
   for k := range seen {
     tags[i] = k
+    i += 1
   }
 
   sort.Strings(tags)

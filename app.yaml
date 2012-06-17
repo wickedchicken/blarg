@@ -11,5 +11,10 @@ handlers:
   static_files: static/robots.txt
   upload: static/robots.txt
 
+- url: /admin/.*
+  script: _go_app
+  login: admin
+  secure: always
+
 - url: /.*
   script: _go_app

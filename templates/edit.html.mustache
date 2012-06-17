@@ -1,0 +1,7 @@
+<input id="title" type="text" value="{{title}}" style="width: 40em;clear:both;float:left;"/>
+<input id="labels" type="text" value="{{labels}}" style="width: 40em;clear:left;float:left;"/>
+<div id="coolbar" style="width: 40em;float:left;margin-left: 3ex;"/><p style="margin:0ex;padding:0;"><button id="savelink">save</button> <span id="status" style="margin-left: 3ex;">connecting...</span></p></div>
+<textarea id="inputbox"  style="border: none; margin-top: 0.5ex; height: 10em; width: 40em; resize:both; float:left; clear:left;" onkeypress="debouncedTextSend()" rows="40" cols="50">{{articlesource}}</textarea>
+<div id="display" style="border: 3px; margin-left: 3ex; width: 50em;clear: none;float:left;"></div>
+<div style="visibility: hidden;" id="token">{{token}}</div>
+<div style="visibility: hidden;" id="session">{{session}}</div>
