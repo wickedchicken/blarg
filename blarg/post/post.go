@@ -6,7 +6,6 @@ import (
     "time"
     "strings"
     "sort"
-    "fmt"
 )
 
 type Post struct {
@@ -113,7 +112,7 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, []string, err
 }
 
 func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*datastore.Key, error){
-  seen := map[datastore.Key]bool {}
+  seen := map[string]*datastore.Key {}
 
   for _,query := range queries{
     var rawtags Tags
@@ -121,20 +120,17 @@ func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*data
     if err != nil { return nil, err }
 
     for _,t := range rawtags{
-      if !seen[*(t.PostKey)] {
-        fmt.Printf("nope! %v\n", seen)
-        seen[*(t.PostKey)] = true
+      if _, ok := seen[t.PostKey.String()]; !ok{
+        seen[t.PostKey.String()] = t.PostKey
       }
     }
   }
 
   keys := make([]*datastore.Key, len(seen))
 
-  fmt.Printf("seen! %v\n", seen)
-
   i := 0
-  for k := range seen{
-    keys[i] = &k
+  for _,v := range seen{
+    keys[i] = v
     i += 1
   }
 
