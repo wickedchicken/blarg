@@ -2,6 +2,7 @@ package layout
 
 import (
     "net/http"
+    "net/url"
     "bytes"
     "io"
     "io/ioutil"
@@ -20,6 +21,16 @@ import (
     "github.com/russross/blackfriday"
     "github.com/hoisie/mustache"
 )
+
+func realhostname(req *http.Request, c appengine.Context)(string, error){
+  fmt.Printf("req.RequestURI: %v\n", req.RequestURI)
+  myurl, err := url.Parse(req.RequestURI)
+  if err != nil{ return "", err }
+  if !myurl.IsAbs() {
+    return appengine.DefaultVersionHostname(c), nil
+  }
+  return myurl.Host, nil
+}
 
 func getLimit(blog_config map[string]interface{}) (int, error){
   var limit int
@@ -88,7 +99,11 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
     //go post.ExecuteQuery(appcontext, query, offset, limit, postchan, errchan)
     go post.GetPosts(appcontext, keys, offset, limit, postchan, errchan)
 
-    myurl := appengine.DefaultVersionHostname(appcontext)
+    myurl, err := realhostname(req, appcontext)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
     scheme := "http://"
     if req.TLS != nil {
       scheme = "https://"
@@ -171,7 +186,11 @@ func std_layout(blog_config map[string]interface{}, f func(w http.ResponseWriter
 
   p := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
-    myurl := appengine.DefaultVersionHostname(appcontext)
+    myurl, err := realhostname(req, appcontext)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
     scheme := "http://"
     if req.TLS != nil {
       scheme = "https://"
@@ -307,7 +326,11 @@ func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.
       return
     } else {
 
-      myurl := appengine.DefaultVersionHostname(appcontext)
+      myurl, err := realhostname(req, appcontext)
+      if err != nil{
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+          return
+      }
       scheme := "http://"
       if req.TLS != nil {
         scheme = "https://"
@@ -355,7 +378,11 @@ func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, r
   l := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
 
-    myurl := appengine.DefaultVersionHostname(appcontext)
+    myurl, err := realhostname(req, appcontext)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
     scheme := "http://"
     if req.TLS != nil {
       scheme = "https://"
@@ -398,7 +425,11 @@ func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, r
 func entrybar(blog_config map[string]interface{}, w http.ResponseWriter, req *http.Request){
   template_dir := "templates/"
   appcontext := appengine.NewContext(req)
-  myurl := appengine.DefaultVersionHostname(appcontext)
+  myurl, err := realhostname(req, appcontext)
+  if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
   scheme := "http://"
   if req.TLS != nil {
     scheme = "https://"
@@ -429,7 +460,11 @@ func admin_layout(blog_config map[string]interface{}, f func(w http.ResponseWrit
 
   p := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
-    myurl := appengine.DefaultVersionHostname(appcontext)
+    myurl, err := realhostname(req, appcontext)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
     scheme := "http://"
     if req.TLS != nil {
       scheme = "https://"
