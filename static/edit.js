@@ -32,25 +32,55 @@ get_elem = function(elem){
   return document.getElementById(elem).value;
 }
 
-sendMessage = function(path, opt_param) {
+sendMessage = function(path, opt_params, appendg) {
   var session_key = document.getElementById("session").innerHTML;
-  path += '?g=' + session_key;
+  if(appendg){
+    path += '?g=' + session_key;
+  }
   //if (opt_param) {
   //  path += '&' + opt_param;
   //}
+  var error = function(status){
+    update_status("error connecting to server: " + status, "#AA0000");
+  }
   var xhr = new XMLHttpRequest();
   xhr.open('POST', path, true);
-  if (opt_param) {
-    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-    xhr.send(opt_param);
+  xhr.onreadystatechange = function(){ 
+    if ( xhr.readyState == 4 ) { 
+      if ( xhr.status == 200 ) { 
+        //success(xhr.responseText); 
+      } else { 
+        error(xhr.status); 
+      } 
+    } 
+  }
+  xhr.onerror = function () { 
+    error(xhr.status); 
+  }
+  if (opt_params) {
+    var multipart = "";
+    var boundary=Math.random().toString().substr(2);
+    xhr.setRequestHeader("content-type",
+                "multipart/form-data; charset=utf-8; boundary=" + boundary);
+    for(var key in opt_params){
+      multipart += "--" + boundary
+                 + "\r\nContent-Disposition: form-data; name=\"" + key +"\""
+                 + "; filename=\"temp.txt\""
+                 + "\r\nContent-type: application/octet-stream"
+                 + "\r\n\r\n" + opt_params[key] + "\r\n";
+    }
+    multipart += "--"+boundary+"--\r\n"; 
+    xhr.send(multipart);
   } else {
     xhr.send();
   }
 };
 
-sendObject = function(path, paramname, obj){
+sendObject = function(path, paramname, obj, sendg){
   var str = JSON.stringify(obj);
-  sendMessage(path, escape(paramname) + "=" + escape(str));
+  var hash = {}
+  hash[paramname] = str;
+  sendMessage(path, hash, sendg);
 }
 
 onOpened = function() {
@@ -84,7 +114,7 @@ onClose = function(){
 submit_text = function(){
   var data = {}
   data['data'] = get_elem("inputbox");
-  sendObject('/admin/render/', 'data', data);
+  sendObject('/admin/render/', 'data', data, true);
   update_status("processing...", "#AAAAAA");
 }
 
@@ -93,7 +123,8 @@ save_post = function(){
   data['data'] = get_elem("inputbox");
   data['title'] = get_elem("title");
   data['labels'] = get_elem("labels");
-  sendObject('/admin/post/', 'data', data);
+  url = document.getElementById('uploadurl').innerHTML;
+  sendObject(url, 'data', data, false);
   update_status("saving...", "#AAAAAA");
 }
 

@@ -3,14 +3,18 @@ package post
 import (
     "appengine"
     "appengine/datastore"
+    "appengine/blobstore"
+    "io/ioutil"
+    "encoding/json"
     "time"
     "strings"
     "sort"
+    "errors"
 )
 
 type Post struct {
   Title       string
-  Content     string
+  Content     appengine.BlobKey
   Postdate    time.Time
   StickyUrl   string
 }
@@ -46,7 +50,7 @@ func conv_title_to_url(title string) string{
   return strings.Replace(strings.Map(strip, lc), " ", "-", -1)
 }
 
-func SavePost(context appengine.Context, title string, content string, tags []string, postdate time.Time) (*datastore.Key, error){
+func SavePost(context appengine.Context, title string, content appengine.BlobKey, tags []string, postdate time.Time) (*datastore.Key, error){
   p1 := Post{
       Title:    title,
       Content:  content,
@@ -101,14 +105,45 @@ func GetTagSlice(context appengine.Context, key *datastore.Key) ([]string, error
   return tags, nil
 }
 
-func GetPost(context appengine.Context, key *datastore.Key) (Post, []string, error){
+func GetPostContent(context appengine.Context, p Post)(string, error){
+
+  data, err := ioutil.ReadAll(blobstore.NewReader(context, p.Content))
+  if err != nil {
+    context.Errorf("ioutil.ReadAll: %v", err)
+    return "", err
+  }
+  if len(data) <= 0{
+    context.Errorf("len(data): %v", len(data))
+    return "", errors.New("len(data) < 1")
+  }
+
+  var decoded interface{}
+  err = json.Unmarshal(data, &decoded)
+  if err != nil {
+    context.Errorf("json.Unmarshal: %v", err)
+    return "", err
+  }
+
+  q := decoded.(map[string]interface{})
+  content,ok := q["data"].(string)
+  if !ok{
+    context.Errorf("post content has no 'data' field internally")
+    return "", errors.New("post has no 'data' field")
+  }
+
+  return content, nil
+}
+
+func GetPost(context appengine.Context, key *datastore.Key) (Post, string, []string, error){
   var p2 Post
   err := datastore.Get(context, key, &p2)
-  if err != nil { return p2, nil, err }
+  if err != nil { return p2, "", nil, err }
   tags, err := GetTagSlice(context, key)
-  if err != nil { return p2, nil, err }
+  if err != nil { return p2, "", nil, err }
+  content, err := GetPostContent(context, p2)
+  if err != nil { return p2, "", nil, err }
 
-  return p2, tags, err
+  return p2, content, tags, err
 }
 
 func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*datastore.Key, error){
@@ -140,6 +175,7 @@ func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*data
 type FullPost struct {
   PostStruct Post
   Tags []string
+  Content string
 }
 
 func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, out chan<- FullPost, errout chan<- error){
@@ -151,7 +187,7 @@ func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, 
   if start+limit > len(keys){ limit = len(keys) - start }
 
   for _,t := range keys[start:start+limit]{
-    post, tags, err := GetPost(c, t)
+    post, content, tags, err := GetPost(c, t)
 
     if err != nil{
       errout <- err
@@ -161,6 +197,7 @@ func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, 
     p1 := FullPost{
       PostStruct: post,
       Tags: tags,
+      Content: content,
     }
 
     out <- p1

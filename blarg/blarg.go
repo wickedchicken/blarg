@@ -2,7 +2,7 @@ package blarg
 
 import (
     "net/http"
-    "pat"
+    "github.com/bmizerany/pat"
     "blarg/config"
     "blarg/layout"
 )
@@ -49,8 +49,10 @@ func init() {
   handle("admin/gettext/:name", layout.GetPostText(blog_config))
   handle_method("POST", "admin/render/:invalid", http.NotFound)
   handle_method("POST", "admin/render/", layout.RenderPost(blog_config))
-  handle_method("POST", "admin/post/:invalid", http.NotFound)
-  handle_method("POST", "admin/post/", layout.Save(blog_config))
+
+  // pat seems to interfere with the blobstore's MIME parsing
+  http.HandleFunc(root + "admin/post", layout.Save(blog_config))
+
 
   handle("sitemap.xml", layout.GetSitemap(blog_config))
 

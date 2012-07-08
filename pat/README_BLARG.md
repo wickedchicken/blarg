@@ -1,1 +1,0 @@
-This package is needed until a bug is fixed with the appengine-go sdk: http://code.google.com/p/googleappengine/issues/detail?id=7694. When that issue is resolved, pat can be installed normally via go get.

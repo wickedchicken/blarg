@@ -4,6 +4,7 @@ import (
     "net/http"
     "bytes"
     "io"
+    "io/ioutil"
     "encoding/json"
     "appengine"
     "blarg/post"
@@ -14,6 +15,7 @@ import (
     "appengine/user"
     "time"
     "appengine/channel"
+    "appengine/blobstore"
     "math/rand"
     "github.com/russross/blackfriday"
     "github.com/hoisie/mustache"
@@ -95,7 +97,7 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
     urlprefix := scheme + myurl + config.Stringify(blog_config["blog_root"])
 
     for p := range postchan{
-      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.PostStruct.Content).Bytes())).String()
+      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
       context := map[string]interface{} { "c": con, "labels": labels(p.Tags, blog_config),
                                           "link_to_entry": urlprefix + "article/" + p.PostStruct.StickyUrl,
                                           "post_date":  p.PostStruct.Postdate.Format("Jan 02 2006"),
@@ -327,7 +329,13 @@ func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.
         return
       }
 
-      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
+      content, err := post.GetPostContent(appcontext, p)
+      if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        appcontext.Errorf("post.GetPostContent: %v", err)
+        return
+      }
+      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(content).Bytes())).String()
       context := map[string]interface{} { "c": con, "labels": labels(tags, blog_config),
                                           "link_to_entry": urlprefix + "article/" + p.StickyUrl,
                                           "comment_display": "none",
@@ -464,9 +472,6 @@ func admin_layout(blog_config map[string]interface{}, f func(w http.ResponseWrit
 }
 
 func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
- //opentoken
- //renderpage
- //sendrendertext
   template_dir := "templates/"
   l := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
@@ -517,8 +522,17 @@ func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req
         return
     }
 
+    posturl := "/admin/post?g=" + key
+    uploadurl, err := blobstore.UploadURL(appcontext, posturl, nil)
+    if err != nil {
+        http.Error(w, "Couldn't create blob URL", http.StatusInternalServerError)
+        appcontext.Errorf("blobstore.UploadURL: %v", err)
+        return
+    }
+
     context["token"] = tok
     context["session"] = key
+    context["uploadurl"] = uploadurl
 
     total_con := config.Stringify_map(config.Merge(blog_config, context))
     c := mustache.RenderFile(template_dir + "edit.html.mustache", total_con)
@@ -555,7 +569,13 @@ func GetPostText(blog_config map[string]interface{}) func(w http.ResponseWriter,
 
       p := ps[0]
 
-      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
+      content, err := post.GetPostContent(appcontext, p)
+      if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        appcontext.Errorf("post.GetPostContent: %v", err)
+        return
+      }
+      con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(content).Bytes())).String()
       io.WriteString(w, con)
     }
   }
@@ -565,8 +585,27 @@ func GetPostText(blog_config map[string]interface{}) func(w http.ResponseWriter,
 func RenderPost(blog_config map[string]interface{}) func(w http.ResponseWriter, req *http.Request){
   l := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
-    data := req.FormValue("data")
-    if data == ""{
+    err := req.ParseMultipartForm(1024 * 1024)
+    if err != nil {
+      appcontext.Errorf("sending markdown payload: %v", err)
+      http.Error(w, err.Error(), http.StatusBadRequest)
+      return
+    }
+    dataFile, _, err := req.FormFile("data")
+    if err != nil{
+      http.Error(w, "did not specify data as a param", http.StatusBadRequest)
+      return
+    }
+
+    data, err := ioutil.ReadAll(dataFile)
+    if err != nil{
+      appcontext.Errorf("ioutil.ReadAll(): %v", err)
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+
+    if len(data) < 1{
+      appcontext.Errorf("len(data): %v", len(data))
       http.Error(w, "did not specify data as a param", http.StatusBadRequest)
       return
     }
@@ -578,7 +617,7 @@ func RenderPost(blog_config map[string]interface{}) func(w http.ResponseWriter, 
     }
 
     var decoded interface{}
-    err := json.Unmarshal(bytes.NewBufferString(data).Bytes(), &decoded)
+    err = json.Unmarshal(data, &decoded)
     if err != nil {
       http.Error(w, err.Error(), http.StatusBadRequest)
       return
@@ -605,11 +644,20 @@ func RenderPost(blog_config map[string]interface{}) func(w http.ResponseWriter, 
 func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *http.Request){
   l := func(w http.ResponseWriter, req *http.Request){
     appcontext := appengine.NewContext(req)
+    blobs, _, err := blobstore.ParseUpload(req)
+    if err != nil {
+      appcontext.Errorf("error parsing blobstore! %v", err)
+      http.Error(w, "error parsing blobstore!", http.StatusBadRequest)
+      return
+    }
+
+    //key := "coolguys"
     key := req.FormValue("g")
     if key == ""{
       http.Error(w, "did not specify a key!", http.StatusBadRequest)
       return
     }
+
 
     send_message := func(stat string, color string){
       con := map[string]interface{} {"status": stat, "color": color}
@@ -620,15 +668,32 @@ func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *h
       }
     }
 
-    data := req.FormValue("data")
-    if data == ""{
+    bdata, ok := blobs["data"]
+    if !ok{
+      http.Error(w, "did not specify data as a param", http.StatusBadRequest)
+      send_message("internal error while saving!", "#AA0000")
+      return
+    }
+    if len(bdata) != 1 {
+      appcontext.Errorf("error parsing blobstore!", err)
+      http.Error(w, "error parsing blobstore!", http.StatusBadRequest)
+      return
+    }
+    jsonkey := bdata[0].BlobKey
+    data, err := ioutil.ReadAll(blobstore.NewReader(appcontext, jsonkey))
+    if err != nil {
+      appcontext.Errorf("error parsing blobstore!", err)
+      http.Error(w, "error parsing blobstore!", http.StatusBadRequest)
+      return
+    }
+    if len(data) <= 0{
       http.Error(w, "did not specify data as a param", http.StatusBadRequest)
       send_message("internal error while saving!", "#AA0000")
       return
     }
 
     var decoded interface{}
-    err := json.Unmarshal(bytes.NewBufferString(data).Bytes(), &decoded)
+    err = json.Unmarshal(data, &decoded)
     if err != nil {
       http.Error(w, err.Error(), http.StatusBadRequest)
       send_message("internal error while saving!", "#AA0000")
@@ -636,7 +701,7 @@ func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *h
     }
 
     q := decoded.(map[string]interface{})
-    str,ok := q["data"].(string)
+    _,ok = q["data"].(string)
     if !ok{
       http.Error(w, "error: must supply JSON with 'data' specified!", http.StatusBadRequest)
       send_message("internal error while saving!", "#AA0000")
@@ -660,7 +725,7 @@ func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *h
       real_labels[i] = strings.ToLower(strings.Trim(individual_labels[i], " \t"))
     }
 
-    _, err = post.SavePost(appcontext, title, str, real_labels, time.Now());
+    _, err = post.SavePost(appcontext, title, jsonkey, real_labels, time.Now());
     if err != nil{
       appcontext.Errorf("saving a post: %v", err)
       http.Error(w, err.Error(), http.StatusInternalServerError)
