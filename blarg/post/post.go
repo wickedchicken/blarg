@@ -149,24 +149,24 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, string, []str
 func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*datastore.Key, error){
   seen := map[string]*datastore.Key {}
 
+  alltags := make(Tags, 0)
   for _,query := range queries{
-    var rawtags Tags
-    _,err := query.GetAll(context, &rawtags)
+    var newtags Tags
+    _,err := query.GetAll(context, &newtags)
     if err != nil { return nil, err }
 
-    for _,t := range rawtags{
-      if _, ok := seen[t.PostKey.String()]; !ok{
-        seen[t.PostKey.String()] = t.PostKey
-      }
-    }
+    alltags = append(alltags, newtags...)
   }
 
-  keys := make([]*datastore.Key, len(seen))
+  sort.Sort(alltags)
 
-  i := 0
-  for _,v := range seen{
-    keys[i] = v
-    i += 1
+  keys := make([]*datastore.Key, 0)
+
+  for _,t := range alltags{
+    if _, ok := seen[t.PostKey.String()]; !ok{
+      seen[t.PostKey.String()] = t.PostKey
+      keys = append(keys, t.PostKey)
+    }
   }
 
   return keys, nil
