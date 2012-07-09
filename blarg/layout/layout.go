@@ -23,7 +23,9 @@ import (
 )
 
 func realhostname(req *http.Request, c appengine.Context)(string, error){
-  fmt.Printf("req.RequestURI: %v\n", req.RequestURI)
+  if req.RequestURI == ""{
+    return appengine.DefaultVersionHostname(c), nil
+  }
   myurl, err := url.Parse(req.RequestURI)
   if err != nil{ return "", err }
   if !myurl.IsAbs() {
