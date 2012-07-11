@@ -17,17 +17,17 @@ google_ad_height = 60;
 //-->
 </script>
 <script type="text/javascript"
-src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
+src="https://pagead2.googlesyndication.com/pagead/show_ads.js">
 </script>
 {{/as_list_code}}
 
 {{#disqus_shortname}}
 <script type="text/javascript">
-  var disqus_shortname = "{{{disqus_shortname}}}"
+  var disqus_shortname = "{{{disqus_shortname}}}";
   (function () {
       var s = document.createElement('script'); s.async = true;
       s.type = 'text/javascript';
-      s.src = 'http://' + disqus_shortname + '.disqus.com/count.js';
+      s.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + disqus_shortname + '.disqus.com/count.js';
       (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
   }());
 </script>
