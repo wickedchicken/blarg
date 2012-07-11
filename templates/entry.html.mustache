@@ -1,4 +1,4 @@
-{{#discus_shortname}}
+{{#disqus_shortname}}
 <script type="text/javascript">
 <!--
     function toggle_visibility(id) {
@@ -10,7 +10,7 @@
     }
 //-->
 </script>
-{{/discus_shortname}}
+{{/disqus_shortname}}
 <div class="post">
     <p class="date" >{{{post_date}}}</p>
 <div class="entry">
@@ -49,10 +49,10 @@ src="https://pagead2.googlesyndication.com/pagead/show_ads.js">
 <a name="comments"></a>
 <div id="disqus_thread"></div>
 <script type="text/javascript">
-    var disqus_shortname = '{{{discus_shortname}}}'; // required: replace example with your forum shortname
+    var disqus_shortname = '{{{disqus_shortname}}}'; // required: replace example with your forum shortname
 
-    var disqus_identifier = {{{link_to_entry}}};
-    var disqus_url = {{{app_url}}}{{{link_to_entry}}};
+    var disqus_identifier = '{{{link_to_entry}}}';
+    var disqus_url = '{{{app_url}}}{{{link_to_entry}}}';
 
     (function() {
         var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
