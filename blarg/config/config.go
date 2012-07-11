@@ -1,8 +1,8 @@
 package config
 
 import (
-  "fmt"
   "encoding/json"
+  "fmt"
   "os"
 )
 

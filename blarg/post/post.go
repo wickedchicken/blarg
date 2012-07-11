@@ -1,15 +1,16 @@
 package post
 
 import (
-    "appengine"
-    "appengine/datastore"
-    "appengine/blobstore"
-    "io/ioutil"
     "encoding/json"
-    "time"
-    "strings"
-    "sort"
     "errors"
+    "io/ioutil"
+    "sort"
+    "strings"
+    "time"
+
+    "appengine"
+    "appengine/blobstore"
+    "appengine/datastore"
 )
 
 type Post struct {

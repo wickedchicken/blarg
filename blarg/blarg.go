@@ -18,12 +18,12 @@ func init() {
 
   m := pat.New()
 
-  handle_method := func(method string, urlpattern string, handler func(http.ResponseWriter, *http.Request)){
-    m.Add(method, root + urlpattern, http.HandlerFunc(handler))
+	handle_method := func(method string, urlpattern string, handler http.HandlerFunc){
+    m.Add(method, root + urlpattern, handler)
   }
 
-  handle := func(urlpattern string, handler func(http.ResponseWriter, *http.Request)){
-    m.Get(root + urlpattern, http.HandlerFunc(handler))
+	handle := func(urlpattern string, handler http.HandlerFunc){
+    m.Get(root + urlpattern, handler)
   }
 
   handle("list/:page/:invalid", http.NotFound)

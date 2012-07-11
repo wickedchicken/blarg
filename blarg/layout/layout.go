@@ -1,25 +1,28 @@
 package layout
 
 import (
-    "net/http"
-    "net/url"
     "bytes"
+    "encoding/json"
+    "fmt"
     "io"
     "io/ioutil"
-    "encoding/json"
-    "appengine"
-    "blarg/post"
-    "blarg/config"
-    "fmt"
+    "math/rand"
+    "net/http"
+    "net/url"
     "strings"
+    "time"
+
+    "appengine"
+    "appengine/blobstore"
+    "appengine/channel"
     "appengine/datastore"
     "appengine/user"
-    "time"
-    "appengine/channel"
-    "appengine/blobstore"
-    "math/rand"
-    "github.com/russross/blackfriday"
+
+    "blarg/config"
+    "blarg/post"
+
     "github.com/hoisie/mustache"
+    "github.com/russross/blackfriday"
 )
 
 func realhostname(req *http.Request, c appengine.Context)(string, error){
