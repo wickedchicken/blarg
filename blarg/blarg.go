@@ -56,13 +56,14 @@ func init() {
 
   handle("sitemap.xml", layout.GetSitemap(blog_config))
 
+  m.Get("/blarg.rss", http.HandlerFunc(layout.GetRSS(blog_config)))
+
   // matching on / will match all URLs
   // so you have to catch invalid top-level URLs first
 
   handle(":invalid/", http.NotFound)
   handle("", layout.IndexListHandler(blog_config, "list"))
 
-  // m.Get("/rss", http.HandlerFunc(Rss))
   //m.Get("/admin", http.HandlerFunc(Admin))
 
   http.Handle(root, m)

@@ -76,14 +76,14 @@ func labels(tags []string, blog_config map[string]interface{}) string{
   return string(labels.Bytes())
 }
 
-func list(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, url_stem string, offset int, limit int, queries []*datastore.Query) {
+func list(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, url_stem string, offset int, limit int, keygen func(appengine.Context) ([]*datastore.Key, error)) {
 
   appcontext := appengine.NewContext(req)
   template_dir := "templates/"
   postchan := make(chan post.FullPost, 16)
   errchan := make(chan error)
 
-  keys, err := post.UniquePosts(appcontext, queries)
+  keys, err := keygen(appcontext)
   if err != nil{
       http.Error(w, err.Error(), http.StatusInternalServerError)
       return
@@ -118,10 +118,10 @@ func list(w http.ResponseWriter, req *http.Request, blog_config map[string]inter
 
     for p := range postchan{
       con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
-      context := map[string]interface{} { "c": con, "labels": labels(p.Tags, blog_config),
-                                          "link_to_entry": urlprefix + "article/" + p.PostStruct.StickyUrl,
-                                          "post_date":  p.PostStruct.Postdate.Format("Jan 02 2006"),
-                                          "post_title": p.PostStruct.Title}
+      context := map[string]interface{} { "c": con, "labels": labels(p.Post.Tags, blog_config),
+                                          "link_to_entry": urlprefix + "article/" + p.Post.StickyUrl,
+                                          "post_date":  p.Post.Postdate.Format("Jan 02 2006"),
+                                          "post_title": p.Post.Title}
       total_con := config.Stringify_map(config.Merge(blog_config, context))
       c := mustache.RenderFile(template_dir + "list_entry.html.mustache", total_con)
       io.WriteString(w, c)
@@ -248,7 +248,7 @@ func IndexListHandler(blog_config map[string]interface{}, url_stem string)func(w
   }
 
   l := func(w http.ResponseWriter, req *http.Request){
-    list(w, req, blog_config, url_stem, 0, limit, post.GetPostsNotMatchingTag("static"))
+    list(w, req, blog_config, url_stem, 0, limit, post.GetPostsMatchingTagCurried("visible posts"))
   }
   return std_layout(blog_config, l)
 }
@@ -264,7 +264,7 @@ func IndexPageHandler(blog_config map[string]interface{}, url_stem string)func(w
         http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
         return
     } else {
-      list(w, req, blog_config, url_stem, offset, limit, post.GetPostsNotMatchingTag("static"))
+      list(w, req, blog_config, url_stem, offset, limit, post.GetPostsMatchingTagCurried("visible posts"))
     }
   }
   return std_layout(blog_config, l)
@@ -285,7 +285,7 @@ func LabelPage(blog_config map[string]interface{}, url_stem string)func(w http.R
           http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
           return
       } else {
-        list(w, req, total_con, url_stem, offset, limit, post.GetPostsMatchingTag(label))
+        list(w, req, total_con, url_stem, offset, limit, post.GetPostsMatchingTagCurried(label))
       }
     }
     std_layout(total_con, q)(w, req)
@@ -305,7 +305,7 @@ func LabelList(blog_config map[string]interface{}, url_stem string)func(w http.R
     context := map[string]interface{} { "search_label": label}
     total_con := config.Merge(blog_config, context)
     q := func(w http.ResponseWriter, req *http.Request){
-      list(w, req, total_con, url_stem, 0, limit, post.GetPostsMatchingTag(label))
+      list(w, req, total_con, url_stem, 0, limit, post.GetPostsMatchingTagCurried(label))
     }
     std_layout(total_con, q)(w, req)
   }
@@ -377,6 +377,74 @@ func GetArticle(blog_config map[string]interface{}, url_stem string)func(w http.
   return std_layout(blog_config, l)
 }
 
+func GetRSS(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
+  template_dir := "templates/"
+  l := func(w http.ResponseWriter, req *http.Request){
+    limit,err := getLimit(blog_config)
+    if err != nil{
+      panic(err)
+    }
+
+    appcontext := appengine.NewContext(req)
+
+    myurl, err := realhostname(req, appcontext)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    scheme := "http://"
+    if req.TLS != nil {
+      scheme = "https://"
+    }
+
+    urlprefix := scheme + myurl + config.Stringify(blog_config["blog_root"])
+
+    keys,err := post.GetPostsMatchingTag(appcontext, "all posts")
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    idx := len(keys)
+
+    offset := 0
+
+    entries := new(bytes.Buffer)
+    if idx >= 1 {
+      postchan := make(chan post.FullPost, 16)
+      errchan := make(chan error)
+
+      go post.GetPosts(appcontext, keys, offset, limit, postchan, errchan)
+      for p := range postchan{
+        con := bytes.NewBuffer(blackfriday.MarkdownCommon(bytes.NewBufferString(p.Content).Bytes())).String()
+        context := map[string]interface{} { "c": con,
+                                            "link_to_entry": urlprefix + "article/" + p.Post.StickyUrl,
+                                            "post_date":  p.Post.Postdate.Format("Jan 02 2006"),
+                                            "post_title": p.Post.Title}
+        total_con := config.Stringify_map(config.Merge(blog_config, context))
+        c := mustache.RenderFile(template_dir + "rss_entry.html.mustache", total_con)
+        io.WriteString(entries, c)
+      }
+      err, ok := <-errchan
+      if ok {
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+          return
+      }
+
+    }
+
+
+    context := map[string]interface{} {
+                                        "lastmod_date":  post.GetLatestDate(appcontext).Format("2006-01-02"),
+                                        "content": entries,
+    }
+
+    total_con := config.Stringify_map(config.Merge(blog_config, context))
+    c := mustache.RenderFile(template_dir + "rss.mustache", total_con)
+    io.WriteString(w, c)
+  }
+  return l
+}
 
 func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
   template_dir := "templates/"
@@ -397,7 +465,7 @@ func GetSitemap(blog_config map[string]interface{})func(w http.ResponseWriter, r
 
     postchan := make(chan post.Post, 16)
     errchan := make(chan error)
-    go post.ExecuteQuery(appcontext, post.GetAllPosts(), -1, -1, func(post.Post)bool{ return true },postchan, errchan)
+    go post.ExecuteQuery(appcontext, post.GetAllPosts(), -1, -1, post.NullFilter, postchan, errchan)
 
     entries := bytes.NewBufferString("")
 

@@ -4,7 +4,6 @@ import (
     "encoding/json"
     "errors"
     "io/ioutil"
-    "sort"
     "strings"
     "time"
 
@@ -18,20 +17,23 @@ type Post struct {
   Content     appengine.BlobKey
   Postdate    time.Time
   StickyUrl   string
+  Tags        []string
 }
 
-type Tag struct {
-  Name        string
+type TagIndex struct {
+  Tags        []string
   Postdate    time.Time
-  PostKey     *datastore.Key
 }
 
-type Tags []Tag
+type FullPost struct {
+  Post        Post
+  Content     string
+}
 
-func (s Tags) Less(i, j int) bool { return s[i].Postdate.UnixNano() > s[j].Postdate.UnixNano() }
-func (s Tags) Len() int { return len(s) }
-func (s Tags) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
+type TagCounts struct{
+  Name        []string
+  Count       []int
+}
 
 func conv_title_to_url(title string) string{
   lc := strings.ToLower(title)
@@ -51,59 +53,95 @@ func conv_title_to_url(title string) string{
   return strings.Replace(strings.Map(strip, lc), " ", "-", -1)
 }
 
+func NullFilter(Post) bool { return true }
+
+func CalculateTagCounts(context appengine.Context) (map[string]int, error){
+  postchan := make(chan Post, 16)
+  errchan := make(chan error)
+
+  go ExecuteQuery(context, GetAllPosts(), -1, -1, NullFilter, postchan, errchan)
+
+  tags := map[string]int {}
+  for p := range postchan{
+    for t := range p.Tags{
+      c,ok := tags[p.Tags[t]]
+      if ok{
+        tags[p.Tags[t]] = c + 1
+      } else {
+        tags[p.Tags[t]] = 1
+      }
+    }
+  }
+
+  err, ok := <-errchan
+  if ok {
+    return nil, err
+  }
+
+  return tags, nil
+}
+
 func SavePost(context appengine.Context, title string, content appengine.BlobKey, tags []string, postdate time.Time) (*datastore.Key, error){
+  // transaction
+
+  temppostkey := datastore.NewIncompleteKey(context, "post", nil)
+
   p1 := Post{
       Title:    title,
       Content:  content,
       Postdate: postdate,
       StickyUrl: conv_title_to_url(title),
+      Tags:     tags,
   }
 
-  temppostkey := datastore.NewIncompleteKey(context, "post", nil)
   postkey,err := datastore.Put(context, temppostkey, &p1)
   if err != nil {
     return nil, err
   }
 
-  t1 := Tag{
-    Name:     "all posts",
-    Postdate: postdate,
-    PostKey:  postkey,
+  tagkey := datastore.NewIncompleteKey(context, "tagindices", postkey)
+  t1 := TagIndex{
+    Tags: tags,
+    Postdate:  postdate,
   }
-  tagkey := datastore.NewIncompleteKey(context, "tag", nil)
   _,err = datastore.Put(context, tagkey, &t1)
   if err != nil {
     return nil, err
   }
 
-  for _,t := range tags{
-    t1 := Tag{
-      Name:     t,
-      Postdate: postdate,
-      PostKey:  postkey,
-    }
-    tagkey := datastore.NewIncompleteKey(context, "tag", nil)
-    _,err = datastore.Put(context, tagkey, &t1)
-    if err != nil {
-      return nil, err
-    }
+  tagcounts, err := CalculateTagCounts(context)
+  if err != nil {
+    return nil, err
   }
 
+  var name []string
+  var count []int
+  for k,v := range tagcounts{
+    name = append(name, k)
+    count = append(count, v)
+  }
+
+  taggggkey := datastore.NewKey(context, "tagcounts", "", 1, nil)
+  t2 := TagCounts{
+    Name: name,
+    Count: count,
+  }
+  _,err = datastore.Put(context, taggggkey, &t2)
+  if err != nil {
+    return nil, err
+  }
+
+  // end transaction
 
   return postkey, nil
 }
 
 func GetTagSlice(context appengine.Context, key *datastore.Key) ([]string, error){
-  var tagstructs []Tag
-  _,err := (GetTagsAssociatedWithPost(key).GetAll(context, &tagstructs))
+  var p2 Post
+  err := datastore.Get(context, key, &p2)
   if err != nil { return nil, err }
 
-  tags := make([]string, len(tagstructs))
-  for i,ts := range tagstructs{
-    tags[i] = ts.Name
-  }
-
-  return tags, nil
+  return p2.Tags, nil
 }
 
 func GetPostContent(context appengine.Context, p Post)(string, error){
@@ -139,44 +177,13 @@ func GetPost(context appengine.Context, key *datastore.Key) (Post, string, []str
   var p2 Post
   err := datastore.Get(context, key, &p2)
   if err != nil { return p2, "", nil, err }
-  tags, err := GetTagSlice(context, key)
+  // double Get of post, fix this
+  tags,err := GetTagSlice(context, key)
   if err != nil { return p2, "", nil, err }
   content, err := GetPostContent(context, p2)
   if err != nil { return p2, "", nil, err }
 
   return p2, content, tags, err
-}
-
-func UniquePosts(context appengine.Context, queries []*datastore.Query) ([]*datastore.Key, error){
-  seen := map[string]*datastore.Key {}
-
-  alltags := make(Tags, 0)
-  for _,query := range queries{
-    var newtags Tags
-    _,err := query.GetAll(context, &newtags)
-    if err != nil { return nil, err }
-
-    alltags = append(alltags, newtags...)
-  }
-
-  sort.Sort(alltags)
-
-  keys := make([]*datastore.Key, 0)
-
-  for _,t := range alltags{
-    if _, ok := seen[t.PostKey.String()]; !ok{
-      seen[t.PostKey.String()] = t.PostKey
-      keys = append(keys, t.PostKey)
-    }
-  }
-
-  return keys, nil
-}
-
-type FullPost struct {
-  PostStruct Post
-  Tags []string
-  Content string
 }
 
 func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, out chan<- FullPost, errout chan<- error){
@@ -188,7 +195,7 @@ func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, 
   if start+limit > len(keys){ limit = len(keys) - start }
 
   for _,t := range keys[start:start+limit]{
-    post, content, tags, err := GetPost(c, t)
+    post, content, _, err := GetPost(c, t)
 
     if err != nil{
       errout <- err
@@ -196,8 +203,7 @@ func GetPosts(c appengine.Context, keys []*datastore.Key, start int, limit int, 
     }
 
     p1 := FullPost{
-      PostStruct: post,
-      Tags: tags,
+      Post: post,
       Content: content,
     }
 
@@ -244,15 +250,26 @@ func GetCount(c appengine.Context, q *datastore.Query) (int, error){
   return q.Count(c)
 }
 
-func GetPostsNotMatchingTag(tag string) ([]*datastore.Query){
-  queries := []*datastore.Query { datastore.NewQuery("tag").Filter("Name <", tag),
-                                  datastore.NewQuery("tag").Filter("Name >", tag),
-                                }
-  return queries
+func GetPostsMatchingTagCurried(tag string) (func (appengine.Context) ([]*datastore.Key, error)){
+  return func(c appengine.Context) ([]*datastore.Key, error) {
+    return GetPostsMatchingTag(c, tag)
+  }
 }
 
-func GetPostsMatchingTag(tag string) ([]*datastore.Query){
-  return []*datastore.Query {datastore.NewQuery("tag").Filter("Name =", tag)}
+func GetPostsMatchingTag(c appengine.Context, tag string) ([]*datastore.Key, error){
+  query := datastore.NewQuery("tagindices").Filter("Tags =", tag).Order("-Postdate").KeysOnly()
+
+  tagindices, err := query.GetAll(c, nil)
+  if err != nil {
+    return nil, err
+  }
+
+  keys := make([]*datastore.Key, len(tagindices))
+  for i,k := range tagindices{
+    keys[i] = k.Parent()
+  }
+
+  return keys, nil
 }
 
 func GetPostsSortedByDate() ([]*datastore.Query){
@@ -283,38 +300,15 @@ func GetLatestDate(context appengine.Context)(time.Time){
 }
 
 func GetAllTags(context appengine.Context) ([]string,[]int, error){
-  seen := map[string]int {}
-
-  query := datastore.NewQuery("tag")
-  var rawtags Tags
+  query := datastore.NewQuery("tagcounts")
+  var rawtags []TagCounts
   _,err := query.GetAll(context, &rawtags)
   if err != nil { return nil, nil, err }
+  if len(rawtags) > 1 { return nil, nil, errors.New("not only one tagcounts struct") }
+  if len(rawtags) < 1 { return make([]string, 0), make([]int, 0), nil }
+  if len(rawtags[0].Name) != len(rawtags[0].Count){ return nil, nil, errors.New("tagcounts Name length doesn't match Counts length") }
 
-  for _,t := range rawtags{
-    if _,ok := seen[t.Name]; !ok {
-      seen[t.Name] = 1
-    } else {
-      seen[t.Name] += 1
-    }
-  }
-
-  delete(seen, "all posts")
-  delete(seen, "static")
-
-  tags := make([]string, len(seen))
-  counts := make([]int, len(seen))
-
-  i := 0
-  for k := range seen {
-    tags[i] = k
-    i += 1
-  }
-
-  sort.Strings(tags)
-
-  for i,v := range tags {
-    counts[i] = seen[v]
-  }
-
+  tags := rawtags[0].Name
+  counts := rawtags[0].Count
   return tags, counts, nil
 }
