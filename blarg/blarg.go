@@ -53,18 +53,15 @@ func init() {
   // pat seems to interfere with the blobstore's MIME parsing
   http.HandleFunc(root + "admin/post", layout.Save(blog_config))
 
-
   handle("sitemap.xml", layout.GetSitemap(blog_config))
 
-  m.Get("/blarg.rss", http.HandlerFunc(layout.GetRSS(blog_config)))
+  m.Get("/index.rss", http.HandlerFunc(layout.GetRSS(blog_config)))
 
   // matching on / will match all URLs
   // so you have to catch invalid top-level URLs first
 
   handle(":invalid/", http.NotFound)
   handle("", layout.IndexListHandler(blog_config, "list"))
-
-  //m.Get("/admin", http.HandlerFunc(Admin))
 
   http.Handle(root, m)
 }
