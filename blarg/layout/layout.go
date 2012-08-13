@@ -68,7 +68,7 @@ func labels(tags []string, blog_config map[string]interface{}) string{
   labels := bytes.NewBufferString("")
 
   for _,l := range tags{
-    if l != "all posts" && l != "static" {
+    if l != "visible"{
       fmt.Fprintf(labels, "<a href=\"%slabel/%s\">%s</a> ", root, l, l)
     }
   }
@@ -171,6 +171,9 @@ func sidebar(w http.ResponseWriter, req *http.Request, blog_config map[string]in
   }
 
   for i := range tags{
+    if tags[i] == "visible"{
+      continue
+    }
     n,count := tags[i], counts[i]
     context = map[string]interface{} { "label_link": "/label/" +n,
                                        "label_title": n,
@@ -248,7 +251,7 @@ func IndexListHandler(blog_config map[string]interface{}, url_stem string)func(w
   }
 
   l := func(w http.ResponseWriter, req *http.Request){
-    list(w, req, blog_config, url_stem, 0, limit, post.GetPostsMatchingTagCurried("visible posts"))
+    list(w, req, blog_config, url_stem, 0, limit, post.GetPostsMatchingTagCurried("visible"))
   }
   return std_layout(blog_config, l)
 }
@@ -264,7 +267,7 @@ func IndexPageHandler(blog_config map[string]interface{}, url_stem string)func(w
         http.Error(w, "bad request: " + err.Error(), http.StatusBadRequest)
         return
     } else {
-      list(w, req, blog_config, url_stem, offset, limit, post.GetPostsMatchingTagCurried("visible posts"))
+      list(w, req, blog_config, url_stem, offset, limit, post.GetPostsMatchingTagCurried("visible"))
     }
   }
   return std_layout(blog_config, l)
@@ -399,7 +402,7 @@ func GetRSS(blog_config map[string]interface{})func(w http.ResponseWriter, req *
 
     urlprefix := scheme + myurl + config.Stringify(blog_config["blog_root"])
 
-    keys,err := post.GetPostsMatchingTag(appcontext, "all posts")
+    keys,err := post.GetPostsMatchingTag(appcontext, "visible")
     if err != nil{
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -597,7 +600,7 @@ func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req
 
       if idx < 1 {
         context["articlesource"] = "Enter your post here!"
-        context["labels"] = ""
+        context["labels"] = "visible"
         context["title"] = "No post with that URL found, making new post!"
       } else {
         var ps []post.Post
@@ -618,7 +621,7 @@ func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req
       }
     }  else {
       context["articlesource"] = "Enter your post here!"
-      context["labels"] = "enter, labels, here"
+      context["labels"] = "visible, enter, labels, here"
       context["title"] = "enter title here"
     }
 
