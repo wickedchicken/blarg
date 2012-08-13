@@ -171,9 +171,6 @@ func sidebar(w http.ResponseWriter, req *http.Request, blog_config map[string]in
   }
 
   for i := range tags{
-    if tags[i] == "visible"{
-      continue
-    }
     n,count := tags[i], counts[i]
     context = map[string]interface{} { "label_link": "/label/" +n,
                                        "label_title": n,

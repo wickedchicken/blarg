@@ -64,6 +64,9 @@ func CalculateTagCounts(context appengine.Context) (map[string]int, error){
   tags := map[string]int {}
   for p := range postchan{
     for t := range p.Tags{
+      if p.Tags[t] == "visible"{
+        continue
+      }
       c,ok := tags[p.Tags[t]]
       if ok{
         tags[p.Tags[t]] = c + 1
