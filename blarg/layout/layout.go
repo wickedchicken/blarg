@@ -612,7 +612,12 @@ func EditPost(blog_config map[string]interface{})func(w http.ResponseWriter, req
           http.Error(w, err.Error(), http.StatusInternalServerError)
         }
 
-        context["articlesource"] = p.Content
+        content, err := post.GetPostContent(appcontext, p)
+        if err != nil{
+          http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+
+        context["articlesource"] = content
         context["labels"] = strings.Join(tags, ", ")
         context["title"] = p.Title
       }
@@ -842,6 +847,66 @@ func Save(blog_config map[string]interface{}) func(w http.ResponseWriter, req *h
     }
 
     send_message("saved", "#00AA00")
+  }
+  return l
+}
+
+type jsonpost struct {
+  Title string
+  Content string
+  Postdate time.Time
+  StickyUrl string
+  Tags []string
+}
+
+func json_export(w http.ResponseWriter, req *http.Request, blog_config map[string]interface{}, keygen func(appengine.Context) ([]*datastore.Key, error)) {
+
+  appcontext := appengine.NewContext(req)
+  postchan := make(chan post.FullPost, 16)
+  errchan := make(chan error)
+
+  keys, err := keygen(appcontext)
+  if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+  }
+
+  posts := map[string]jsonpost{}
+
+  idx := len(keys)
+  if idx < 1 {
+    io.WriteString(w, fmt.Sprintf("{}"))
+  } else {
+    go post.GetPosts(appcontext, keys, 0, len(keys), postchan, errchan)
+    for p := range postchan{
+      posts[p.Post.StickyUrl] = jsonpost{
+        p.Post.Title,
+        p.Content,
+        p.Post.Postdate,
+        p.Post.StickyUrl,
+        p.Post.Tags,
+      }
+    }
+
+    err, ok := <-errchan
+    if ok {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    b, err := json.Marshal(posts)
+    if err != nil{
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+
+    io.WriteString(w, bytes.NewBuffer(b).String())
+  }
+}
+
+func JSONAllEntries(blog_config map[string]interface{})func(w http.ResponseWriter, req *http.Request){
+  l := func(w http.ResponseWriter, req *http.Request){
+    json_export(w, req, blog_config, post.GetAllPostKeys)
   }
   return l
 }

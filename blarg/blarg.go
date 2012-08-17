@@ -45,6 +45,10 @@ func init() {
   handle("admin/edit/:name", layout.EditPost(blog_config))
   handle("admin/edit/", layout.EditPost(blog_config))
 
+  handle("admin/dump/all.json/:invalid", http.NotFound)
+  handle("admin/dump/all.json", layout.JSONAllEntries(blog_config))
+  handle("admin/dump/:invalid", http.NotFound)
+
   handle("admin/gettext/:name/:invalid", http.NotFound)
   handle("admin/gettext/:name", layout.GetPostText(blog_config))
   handle_method("POST", "admin/render/:invalid", http.NotFound)

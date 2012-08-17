@@ -275,6 +275,16 @@ func GetPostsMatchingTag(c appengine.Context, tag string) ([]*datastore.Key, err
   return keys, nil
 }
 
+func GetAllPostKeys(c appengine.Context) ([]*datastore.Key, error){
+  query := datastore.NewQuery("post").KeysOnly()
+  posts, err := query.GetAll(c, nil)
+  if err != nil {
+    return nil, err
+  }
+
+  return posts, nil
+}
+
 func GetPostsSortedByDate() ([]*datastore.Query){
   return []*datastore.Query {datastore.NewQuery("post").Order("-Postdate")}
 }
