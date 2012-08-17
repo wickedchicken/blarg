@@ -9,6 +9,8 @@ to automate away administering a blog -- Google Analytics, Disqus, Papertrail,
 Librato Metrics and AdSense can be enabled by adding the appropriate auth code
 to the configuration file.
 
+Blarg is still in its infancy, but is functional. Check it out!
+
 <!---
 vim:tw=80
 -->
